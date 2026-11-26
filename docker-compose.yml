@@ -1,0 +1,153 @@
+# =============================================================================
+# MediCore Docker Compose - Development Configuration
+# =============================================================================
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: medicore-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-medicore_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-medicore_password}
+      POSTGRES_DB: ${POSTGRES_DB:-medicore_db}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-medicore_user} -d ${POSTGRES_DB:-medicore_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - medicore-network
+
+  # Redis Cache & Job Queue
+  redis:
+    image: redis:7-alpine
+    container_name: medicore-redis
+    restart: unless-stopped
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - medicore-network
+
+  # Express.js Backend API
+  api:
+    build:
+      context: ./apps/api
+      dockerfile: ../../infrastructure/docker/Dockerfile.api
+    container_name: medicore-api
+    restart: unless-stopped
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      API_PORT: 4000
+      API_HOST: 0.0.0.0
+      DATABASE_URL: postgresql://${POSTGRES_USER:-medicore_user}:${POSTGRES_PASSWORD:-medicore_password}@postgres:5432/${POSTGRES_DB:-medicore_db}?schema=public
+      REDIS_URL: redis://redis:6379
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-dev-access-secret-change-in-production-32chars}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-dev-refresh-secret-change-in-production-32chars}
+      CORS_ORIGIN: http://localhost:3000
+      ANALYTICS_API_KEY: ${ANALYTICS_API_KEY:-change-this-to-a-secure-api-key}
+    ports:
+      - "4000:4000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:4000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - medicore-network
+
+  # Next.js Frontend
+  web:
+    build:
+      context: ./apps/web
+      dockerfile: ../../infrastructure/docker/Dockerfile.web
+    container_name: medicore-web
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:4000/api/v1
+      NEXT_PUBLIC_ANALYTICS_URL: http://localhost:8000/api/v1
+    ports:
+      - "3000:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - medicore-network
+
+  # FastAPI Analytics Service
+  analytics:
+    build:
+      context: ./apps/analytics
+      dockerfile: ../../infrastructure/docker/Dockerfile.analytics
+    container_name: medicore-analytics
+    restart: unless-stopped
+    environment:
+      ANALYTICS_HOST: 0.0.0.0
+      ANALYTICS_PORT: 8000
+      ANALYTICS_API_KEY: ${ANALYTICS_API_KEY:-change-this-to-a-secure-api-key}
+      ANALYTICS_DATABASE_URL: postgresql://${POSTGRES_USER:-medicore_user}:${POSTGRES_PASSWORD:-medicore_password}@postgres:5432/${POSTGRES_DB:-medicore_db}
+      ANALYTICS_CORS_ORIGIN: http://localhost:3000
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - medicore-network
+
+  # BullMQ Worker
+  worker:
+    build:
+      context: ./apps/api
+      dockerfile: ../../infrastructure/docker/Dockerfile.worker
+    container_name: medicore-worker
+    restart: unless-stopped
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-medicore_user}:${POSTGRES_PASSWORD:-medicore_password}@postgres:5432/${POSTGRES_DB:-medicore_db}?schema=public
+      REDIS_URL: redis://redis:6379
+      SMTP_HOST: ${SMTP_HOST:-sandbox.smtp.mailtrap.io}
+      SMTP_PORT: ${SMTP_PORT:-2525}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-noreply@medicore.local}
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    networks:
+      - medicore-network
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  medicore-network:
+    driver: bridge

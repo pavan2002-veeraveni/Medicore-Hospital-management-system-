@@ -1,0 +1,12 @@
+# MediCore Code Owners (Assessment 10: Clinical Change Review)
+# Changes affecting access control, database migrations, or clinical workflows require review.
+
+* @medicore-maintainers
+/apps/api/prisma/migrations/ @medicore-db-architects @medicore-security
+/apps/api/src/middleware/ @medicore-security
+/apps/api/src/modules/auth/ @medicore-security
+/apps/api/src/modules/consent/ @medicore-security @medicore-clinical
+/apps/api/src/modules/encounters/ @medicore-clinical
+/apps/api/src/modules/prescriptions/ @medicore-clinical
+/apps/api/src/modules/laboratories/ @medicore-clinical
+/.github/workflows/ @medicore-devops

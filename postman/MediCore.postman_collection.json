@@ -1,0 +1,172 @@
+{
+  "info": {
+    "name": "MediCore Hospital Management API",
+    "description": "Complete API collection for MediCore Hospital Management Platform",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:4000/api/v1" },
+    { "key": "accessToken", "value": "" },
+    { "key": "refreshToken", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        { "name": "Health Check", "request": { "method": "GET", "url": "http://localhost:4000/health" } },
+        { "name": "Readiness Check", "request": { "method": "GET", "url": "http://localhost:4000/ready" } }
+      ]
+    },
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Register Patient",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/auth/register",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"email\":\"newpatient@medicore.local\",\"password\":\"Password123!\",\"firstName\":\"New\",\"lastName\":\"Patient\",\"role\":\"PATIENT\"}" }
+          }
+        },
+        {
+          "name": "Login",
+          "event": [{ "listen": "test", "script": { "exec": ["var json = pm.response.json();","if(json.success){pm.collectionVariables.set('accessToken',json.data.accessToken);pm.collectionVariables.set('refreshToken',json.data.refreshToken);}"] } }],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/auth/login",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"email\":\"admin@medicore.local\",\"password\":\"Password123!\"}" }
+          }
+        },
+        {
+          "name": "Get Profile",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/auth/profile",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }]
+          }
+        },
+        {
+          "name": "Refresh Token",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/auth/refresh-token",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"refreshToken\":\"{{refreshToken}}\"}" }
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/auth/logout",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"refreshToken\":\"{{refreshToken}}\"}" }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Patients",
+      "item": [
+        { "name": "List Patients", "request": { "method": "GET", "url": "{{baseUrl}}/patients?page=1&limit=20", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }] } },
+        { "name": "Get Patient by ID", "request": { "method": "GET", "url": "{{baseUrl}}/patients/:id", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }] } }
+      ]
+    },
+    {
+      "name": "Appointments",
+      "item": [
+        { "name": "List Appointments", "request": { "method": "GET", "url": "{{baseUrl}}/appointments?page=1&limit=20", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }] } },
+        { "name": "Get Available Slots", "request": { "method": "GET", "url": "{{baseUrl}}/appointments/available-slots?doctorId=&date=2026-11-28", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }] } },
+        {
+          "name": "Create Appointment",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/appointments",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"patientId\":\"\",\"doctorId\":\"\",\"scheduledStart\":\"2026-11-28T10:00:00Z\",\"scheduledEnd\":\"2026-11-28T10:30:00Z\",\"type\":\"CONSULTATION\",\"reason\":\"Annual checkup\"}" }
+          }
+        },
+        { "name": "Confirm Appointment", "request": { "method": "PATCH", "url": "{{baseUrl}}/appointments/:id/confirm", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }] } },
+        { "name": "Check In", "request": { "method": "PATCH", "url": "{{baseUrl}}/appointments/:id/check-in", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }] } },
+        { "name": "Complete", "request": { "method": "PATCH", "url": "{{baseUrl}}/appointments/:id/complete", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }] } },
+        {
+          "name": "Cancel Appointment",
+          "request": {
+            "method": "PATCH",
+            "url": "{{baseUrl}}/appointments/:id/cancel",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"reason\":\"Patient requested cancellation\"}" }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Departments",
+      "item": [
+        { "name": "List Departments", "request": { "method": "GET", "url": "{{baseUrl}}/departments", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }] } }
+      ]
+    },
+    {
+      "name": "Encounters",
+      "item": [
+        { "name": "List Encounters", "request": { "method": "GET", "url": "{{baseUrl}}/encounters", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }] } }
+      ]
+    },
+    {
+      "name": "Prescriptions",
+      "item": [
+        { "name": "List Prescriptions", "request": { "method": "GET", "url": "{{baseUrl}}/prescriptions", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }] } }
+      ]
+    },
+    {
+      "name": "Lab Orders",
+      "item": [
+        { "name": "List Lab Orders", "request": { "method": "GET", "url": "{{baseUrl}}/lab-orders", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }] } },
+        { "name": "List Lab Tests", "request": { "method": "GET", "url": "{{baseUrl}}/laboratories", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }] } }
+      ]
+    },
+    {
+      "name": "Billing",
+      "item": [
+        { "name": "List Invoices", "request": { "method": "GET", "url": "{{baseUrl}}/billing", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }] } }
+      ]
+    },
+    {
+      "name": "Consents",
+      "item": [
+        { "name": "List Consents", "request": { "method": "GET", "url": "{{baseUrl}}/consents", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }] } }
+      ]
+    },
+    {
+      "name": "Audit Logs",
+      "item": [
+        { "name": "List Audit Logs (Admin)", "request": { "method": "GET", "url": "{{baseUrl}}/audit-logs?page=1&limit=50", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }] } }
+      ]
+    },
+    {
+      "name": "Notifications",
+      "item": [
+        { "name": "Get Notifications", "request": { "method": "GET", "url": "{{baseUrl}}/notifications", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }] } },
+        { "name": "Unread Count", "request": { "method": "GET", "url": "{{baseUrl}}/notifications/unread-count", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }] } }
+      ]
+    },
+    {
+      "name": "FHIR",
+      "item": [
+        { "name": "Export Patient", "request": { "method": "GET", "url": "{{baseUrl}}/fhir/Patient/:id/export", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }] } },
+        { "name": "Sync Records", "request": { "method": "GET", "url": "{{baseUrl}}/fhir/sync-records", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }] } }
+      ]
+    },
+    {
+      "name": "Analytics",
+      "item": [
+        { "name": "Appointment Utilization", "request": { "method": "GET", "url": "http://localhost:8000/api/v1/analytics/appointment-utilization", "header": [{ "key": "X-API-Key", "value": "change-this-to-a-secure-api-key" }] } },
+        { "name": "Waiting Times", "request": { "method": "GET", "url": "http://localhost:8000/api/v1/analytics/waiting-times", "header": [{ "key": "X-API-Key", "value": "change-this-to-a-secure-api-key" }] } },
+        { "name": "Lab Turnaround", "request": { "method": "GET", "url": "http://localhost:8000/api/v1/analytics/lab-turnaround", "header": [{ "key": "X-API-Key", "value": "change-this-to-a-secure-api-key" }] } },
+        { "name": "Patient Population", "request": { "method": "GET", "url": "http://localhost:8000/api/v1/analytics/patient-population", "header": [{ "key": "X-API-Key", "value": "change-this-to-a-secure-api-key" }] } }
+      ]
+    }
+  ]
+}
