@@ -5,7 +5,7 @@
 
 ## Services
 
-### 1. Frontend (`apps/web/`)
+### 1. Frontend (`frontend/`)
 - **Framework**: Next.js 14 with App Router
 - **Language**: TypeScript
 - **Styling**: Tailwind CSS + shadcn/ui
@@ -13,16 +13,16 @@
 - **Forms**: React Hook Form + Zod
 - **Charts**: Recharts
 
-### 2. Backend API (`apps/api/`)
+### 2. Backend API (`backend/api/`)
 - **Framework**: Express.js
 - **Language**: TypeScript
-- **ORM**: Prisma (PostgreSQL)
+- **ORM**: Prisma (PostgreSQL, schema & migrations in `database/`)
 - **Auth**: JWT (access + refresh tokens), Argon2id
 - **Validation**: Zod
 - **Docs**: Swagger/OpenAPI
 - **Queue**: BullMQ (Redis)
 
-### 3. Analytics Service (`apps/analytics/`)
+### 3. Analytics Service (`backend/analytics/`)
 - **Framework**: FastAPI
 - **Language**: Python 3.12
 - **Validation**: Pydantic

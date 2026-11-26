@@ -62,31 +62,31 @@ jobs:
         run: npm ci
 
       - name: Generate Prisma client
-        working-directory: apps/api
+        working-directory: backend/api
         run: npx prisma generate
 
       - name: Type check
-        working-directory: apps/api
+        working-directory: backend/api
         run: npm run typecheck
 
       - name: Lint
-        working-directory: apps/api
+        working-directory: backend/api
         run: npm run lint
 
       - name: Run database migrations
-        working-directory: apps/api
+        working-directory: backend/api
         env:
           DATABASE_URL: postgresql://medicore_test:test_password@localhost:5432/medicore_test
         run: npx prisma migrate deploy
 
       - name: Seed test database
-        working-directory: apps/api
+        working-directory: backend/api
         env:
           DATABASE_URL: postgresql://medicore_test:test_password@localhost:5432/medicore_test
         run: npm run db:seed
 
       - name: Run tests
-        working-directory: apps/api
+        working-directory: backend/api
         env:
           NODE_ENV: test
           DATABASE_URL: postgresql://medicore_test:test_password@localhost:5432/medicore_test
@@ -117,19 +117,19 @@ jobs:
         run: npm ci
 
       - name: Type check
-        working-directory: apps/web
+        working-directory: frontend
         run: npm run typecheck
 
       - name: Lint
-        working-directory: apps/web
+        working-directory: frontend
         run: npm run lint
 
       - name: Build
-        working-directory: apps/web
+        working-directory: frontend
         run: npm run build
 
       - name: Run tests
-        working-directory: apps/web
+        working-directory: frontend
         run: npm run test -- --reporter=verbose
 
   # =========================================================================
@@ -147,24 +147,24 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
-          cache-dependency-path: apps/analytics/requirements.txt
+          cache-dependency-path: backend/analytics/requirements.txt
 
       - name: Install dependencies
-        working-directory: apps/analytics
+        working-directory: backend/analytics
         run: |
           pip install --upgrade pip
           pip install -r requirements.txt
 
       - name: Lint with ruff
-        working-directory: apps/analytics
+        working-directory: backend/analytics
         run: ruff check .
 
       - name: Type check with mypy
-        working-directory: apps/analytics
+        working-directory: backend/analytics
         run: mypy app/ --ignore-missing-imports || true
 
       - name: Run tests
-        working-directory: apps/analytics
+        working-directory: backend/analytics
         env:
           ANALYTICS_API_KEY: change-this-to-a-secure-api-key
         run: python -m pytest tests/ -v --tb=short
@@ -212,13 +212,13 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Build API image
-        run: docker build -f infrastructure/docker/Dockerfile.api -t medicore-api:test ./apps/api
+        run: docker build -f infrastructure/docker/Dockerfile.api -t medicore-api:test .
 
       - name: Build Web image
-        run: docker build -f infrastructure/docker/Dockerfile.web -t medicore-web:test ./apps/web
+        run: docker build -f infrastructure/docker/Dockerfile.web -t medicore-web:test ./frontend
 
       - name: Build Analytics image
-        run: docker build -f infrastructure/docker/Dockerfile.analytics -t medicore-analytics:test ./apps/analytics
+        run: docker build -f infrastructure/docker/Dockerfile.analytics -t medicore-analytics:test ./backend/analytics
 
   # =========================================================================
   # Database Migration Check
@@ -256,17 +256,17 @@ jobs:
         run: npm ci
 
       - name: Generate Prisma client
-        working-directory: apps/api
+        working-directory: backend/api
         run: npx prisma generate
 
       - name: Run migrations
-        working-directory: apps/api
+        working-directory: backend/api
         env:
           DATABASE_URL: postgresql://medicore_test:test_password@localhost:5432/medicore_test
         run: npx prisma migrate deploy
 
       - name: Validate schema
-        working-directory: apps/api
+        working-directory: backend/api
         env:
           DATABASE_URL: postgresql://medicore_test:test_password@localhost:5432/medicore_test
         run: npx prisma validate

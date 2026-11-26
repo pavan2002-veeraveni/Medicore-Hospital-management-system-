@@ -1,0 +1,20 @@
+# Ignore local workspace artifacts and secrets from root Docker build context
+.git
+.github
+node_modules
+**/node_modules
+frontend/.next
+backend/api/dist
+backend/analytics/__pycache__
+backend/analytics/**/__pycache__
+.pytest_cache
+.ruff_cache
+.mypy_cache
+coverage
+.env
+.env.*
+**/.env
+**/.env.*
+*.log
+docs
+postman

@@ -44,7 +44,7 @@
 - **Single Source of Truth:** All transactional healthcare data is owned and mutated exclusively by the core API service.
 - **Strict Compliance & Security:** Defense-in-depth combining Argon2id password hashing, short-lived JWTs with rotating refresh tokens, RBAC, resource-level authorization, explicit consent gates, and comprehensive audit logs.
 - **Asynchronous Resilience:** Non-blocking execution of notifications, FHIR synchronization, and heavy side effects via Redis-backed BullMQ queues.
-- **Clean Separation of Concerns:** Presentation (`apps/web`), transactional business logic (`apps/api`), and read-only analytics (`apps/analytics`) remain cleanly decoupled within a unified monorepo.
+- **Clean Separation of Concerns:** Presentation (`frontend`), transactional business logic (`backend/api`), and read-only analytics (`backend/analytics`) remain cleanly decoupled within a unified monorepo.
 
 ---
 
@@ -56,9 +56,9 @@ MediCore is organized as an **npm workspaces monorepo** containing three primary
 
 | Component | Path | Technology Stack | Port | Responsibility |
 | :--- | :--- | :--- | :--- | :--- |
-| **Web Frontend** | `apps/web` | Next.js (App Router), TypeScript, React | `3000` | Role-specific clinical, administrative, and patient portals; presentation and SSR/CSR routing. |
-| **Core REST API** | `apps/api` | Express.js, TypeScript, Prisma ORM, Zod, BullMQ, Pino, Swagger | `4000` | All domain business logic, transactional persistence, auth/RBAC, consent checks, audit logging, queue producers/workers, FHIR sync. |
-| **Analytics Service** | `apps/analytics` | Python, FastAPI, Uvicorn | `8000` | Read-only operational/clinical aggregations, KPIs, and statistical queries via internal API. |
+| **Web Frontend** | `frontend` | Next.js (App Router), TypeScript, React | `3000` | Role-specific clinical, administrative, and patient portals; presentation and SSR/CSR routing. |
+| **Core REST API** | `backend/api` | Express.js, TypeScript, Prisma ORM, Zod, BullMQ, Pino, Swagger | `4000` | All domain business logic, transactional persistence, auth/RBAC, consent checks, audit logging, queue producers/workers, FHIR sync. |
+| **Analytics Service** | `backend/analytics` | Python, FastAPI, Uvicorn | `8000` | Read-only operational/clinical aggregations, KPIs, and statistical queries via internal API. |
 | **Primary Database** | `database/` | PostgreSQL | `5432` | ACID-compliant relational storage for all clinical, operational, billing, consent, and audit records. |
 | **Cache & Queue Broker** | — | Redis (`ioredis`) | `6379` | BullMQ job queues, delayed/scheduled jobs, token/session revocation state, and short-lived caching. |
 | **Shared Packages** | `packages/*` | TypeScript (`api-contracts`, `shared-types`, `shared-config`) | — | Shared DTOs, Zod/contract definitions, error schemas, constants, and linting/TS configs. |
@@ -80,9 +80,9 @@ flowchart TB
     end
 
     subgraph Monorepo["MediCore Monorepo Services"]
-        Web["Next.js App Router<br/>apps/web :3000<br/>Presentation Tier"]
-        API["Express.js REST API<br/>apps/api :4000<br/>Domain Logic & Workers"]
-        Analytics["FastAPI Analytics<br/>apps/analytics :8000<br/>Read-Only Aggregation"]
+        Web["Next.js App Router<br/>frontend :3000<br/>Presentation Tier"]
+        API["Express.js REST API<br/>backend/api :4000<br/>Domain Logic & Workers"]
+        Analytics["FastAPI Analytics<br/>backend/analytics :8000<br/>Read-Only Aggregation"]
     end
 
     subgraph Data["Data & Messaging Infrastructure"]
@@ -111,7 +111,7 @@ Strict service boundaries prevent split-brain business logic, accidental PHI exp
 
 ### Boundary Matrix
 
-| Responsibility | `apps/web` (Next.js) | `apps/api` (Express.js) | `apps/analytics` (FastAPI) |
+| Responsibility | `frontend` (Next.js) | `backend/api` (Express.js) | `backend/analytics` (FastAPI) |
 | :--- | :--- | :--- | :--- |
 | **UI Rendering & Client Navigation** | **Owner** | None | None |
 | **Business Rules & State Transitions** | None (UX hints only) | **Owner** | None |
@@ -126,28 +126,28 @@ Strict service boundaries prevent split-brain business logic, accidental PHI exp
 
 ### Boundary Rules
 
-1. **Express API (`apps/api`) Owns ALL Business Data:**
-   - All domain entities (`patients`, `staff`, `departments`, `appointments`, `encounters`, `diagnoses`, `prescriptions`, `laboratories`, `billing`, `consent`, `audit`, `notifications`, `fhir`) are exclusively created, updated, and validated inside `apps/api`.
+1. **Express API (`backend/api`) Owns ALL Business Data:**
+   - All domain entities (`patients`, `staff`, `departments`, `appointments`, `encounters`, `diagnoses`, `prescriptions`, `laboratories`, `billing`, `consent`, `audit`, `notifications`, `fhir`) are exclusively created, updated, and validated inside `backend/api`.
    - Every mutation passes through Zod schema validation, authentication middleware, RBAC + resource-level authorization, consent checks (where PHI access/sharing applies), and Prisma transactions.
-   - `apps/api` acts as the **API Gateway / BFF** for analytics requests: `apps/web` requests analytics through `apps/api` (or via authenticated API-mediated endpoints) so user JWTs, RBAC permissions, and audit trails are consistently enforced before calling `apps/analytics`.
+   - `backend/api` acts as the **API Gateway / BFF** for analytics requests: `frontend` requests analytics through `backend/api` (or via authenticated API-mediated endpoints) so user JWTs, RBAC permissions, and audit trails are consistently enforced before calling `backend/analytics`.
 
-2. **FastAPI Analytics (`apps/analytics`) Provides READ-ONLY Analytics:**
+2. **FastAPI Analytics (`backend/analytics`) Provides READ-ONLY Analytics:**
    - Exposes internal endpoints (e.g., `/api/v1/analytics/appointments`, `/api/v1/analytics/revenue`, `/api/v1/analytics/lab-turnaround`) protected by `ANALYTICS_API_KEY`.
    - Connects to PostgreSQL using a dedicated, least-privilege **read-only** database principal (`medicore_readonly`) with `SELECT`-only grants on approved tables/materialized views.
    - Never mutates operational tables, never issues user tokens, and is never exposed directly to unauthenticated public traffic.
 
-3. **Next.js Frontend (`apps/web`) Handles Presentation Only:**
+3. **Next.js Frontend (`frontend`) Handles Presentation Only:**
    - Built with Next.js App Router for Server Components, Client Components, form UX, dashboards, and role-based layouts.
    - Contains zero direct database drivers, zero Redis clients, and zero authoritative authorization logic.
-   - All state mutations and protected data fetches flow over HTTPS to `apps/api` (`/api/v1/*`) using JWT bearer credentials.
+   - All state mutations and protected data fetches flow over HTTPS to `backend/api` (`/api/v1/*`) using JWT bearer credentials.
 
 ---
 
 ## 4. Module Architecture
 
-The Express.js backend (`apps/api/src/modules/`) follows a **modular monolith** pattern. Each module encapsulates its own routes, controllers, services, repositories (via Prisma), Zod validators, and domain types, communicating across module boundaries through well-defined service interfaces or internal domain events.
+The Express.js backend (`backend/api/src/modules/`) follows a **modular monolith** pattern. Each module encapsulates its own routes, controllers, services, repositories (via Prisma), Zod validators, and domain types, communicating across module boundaries through well-defined service interfaces or internal domain events.
 
-> **Note:** MediCore organizes **14 domain and platform modules** (spanning the 13 clinical/operational/platform modules plus `diagnoses` as a dedicated clinical sub-domain alongside `encounters`) under `apps/api/src/modules/`:
+> **Note:** MediCore organizes **14 domain and platform modules** (spanning the 13 clinical/operational/platform modules plus `diagnoses` as a dedicated clinical sub-domain alongside `encounters`) under `backend/api/src/modules/`:
 
 ### Module Inventory
 
@@ -171,7 +171,7 @@ The Express.js backend (`apps/api/src/modules/`) follows a **modular monolith** 
 ### Internal Layering per Module
 
 ```text
-apps/api/src/modules/<module>/
+backend/api/src/modules/<module>/
 ├── <module>.routes.ts       # Express router + OpenAPI annotations + middleware chain
 ├── <module>.controller.ts   # HTTP request/response mapping & status codes
 ├── <module>.service.ts      # Business logic, state transitions, consent & event emission
@@ -234,7 +234,7 @@ sequenceDiagram
 
 ## 6. Security Architecture
 
-Healthcare data (PHI/PII) demands zero-trust enforcement inside `apps/api` regardless of client behavior.
+Healthcare data (PHI/PII) demands zero-trust enforcement inside `backend/api` regardless of client behavior.
 
 ### 6.1 Authentication & Token Lifecycle
 
@@ -270,7 +270,7 @@ RBAC alone is insufficient in healthcare ("a doctor cannot read every patient's 
 
 ### 6.4 Patient Consent Checks
 
-Before returning sensitive clinical records, exporting to external FHIR servers, or including identifiable records in secondary workflows, `apps/api` invokes the `consent` module:
+Before returning sensitive clinical records, exporting to external FHIR servers, or including identifiable records in secondary workflows, `backend/api` invokes the `consent` module:
 - Evaluates active consent records (`patientId`, `purpose`: `TREATMENT` | `DATA_SHARING` | `FHIR_EXPORT` | `ANALYTICS`, `status`: `GRANTED` | `REVOKED`, `expiresAt`).
 - Denies external FHIR export (`403 Forbidden` — `CONSENT_REQUIRED`) if `FHIR_EXPORT` consent is absent or revoked.
 - Records every consent grant, update, revocation, and consent-gate decision in the immutable `audit` log.
@@ -378,7 +378,7 @@ Notifications are decoupled from HTTP request latency using **BullMQ** backed by
 
 ```mermaid
 flowchart LR
-    subgraph Producers["Domain Modules (apps/api)"]
+    subgraph Producers["Domain Modules (backend/api)"]
         Appt["appointments"]
         Lab["laboratories"]
         Rx["prescriptions"]
@@ -458,13 +458,13 @@ MediCore is designed to scale smoothly from a single clinic deployment to a mult
 
 ### 8.1 Horizontal Scaling of Stateless Services
 
-- **Next.js (`apps/web`) & Express API (`apps/api`):** Both services are stateless in request handling (JWTs are self-contained; session/revocation state and queues live in Redis/PostgreSQL). Multiple replicas can run behind **Nginx** or a cloud load balancer with health checks (`/health` / `/ready`).
-- **Worker Separation:** BullMQ workers (`notifications`, `fhir`) currently co-located or launched from `apps/api` can be scaled into dedicated worker replicas by running only the worker entrypoint, preventing heavy background bursts (e.g., batch reminders or FHIR sync retries) from degrading API P99 latency.
+- **Next.js (`frontend`) & Express API (`backend/api`):** Both services are stateless in request handling (JWTs are self-contained; session/revocation state and queues live in Redis/PostgreSQL). Multiple replicas can run behind **Nginx** or a cloud load balancer with health checks (`/health` / `/ready`).
+- **Worker Separation:** BullMQ workers (`notifications`, `fhir`) currently co-located or launched from `backend/api` can be scaled into dedicated worker replicas by running only the worker entrypoint, preventing heavy background bursts (e.g., batch reminders or FHIR sync retries) from degrading API P99 latency.
 
 ### 8.2 Database Scaling & Query Optimization (PostgreSQL)
 
-- **Connection Pooling:** `apps/api` manages bounded pools (`DATABASE_POOL_MIN=2`, `DATABASE_POOL_MAX=10` per instance). At higher API replica counts, introduce **PgBouncer** in transaction-pooling mode in front of PostgreSQL to prevent connection exhaustion.
-- **Read Replicas for Analytics & Reporting:** Currently `apps/analytics` uses `medicore_readonly` against PostgreSQL. Under heavy analytical load, point `ANALYTICS_DATABASE_URL` directly to a dedicated **PostgreSQL Read Replica** so OLAP aggregations never contend with OLTP clinical writes.
+- **Connection Pooling:** `backend/api` manages bounded pools (`DATABASE_POOL_MIN=2`, `DATABASE_POOL_MAX=10` per instance). At higher API replica counts, introduce **PgBouncer** in transaction-pooling mode in front of PostgreSQL to prevent connection exhaustion.
+- **Read Replicas for Analytics & Reporting:** Currently `backend/analytics` uses `medicore_readonly` against PostgreSQL. Under heavy analytical load, point `ANALYTICS_DATABASE_URL` directly to a dedicated **PostgreSQL Read Replica** so OLAP aggregations never contend with OLTP clinical writes.
 - **Indexing & Table Partitioning:**
   - Composite B-tree indexes on high-cardinality query paths: `(patientId, createdAt)`, `(departmentId, scheduledAt, status)`, and `(actorId, timestamp)`.
   - Time-based range partitioning (monthly/quarterly) on high-volume append-only tables such as `audit_logs` and `notifications`, enabling fast retention archival without table bloat.
@@ -478,8 +478,8 @@ MediCore is designed to scale smoothly from a single clinic deployment to a mult
 ### 8.4 Caching & Payload Optimization
 
 - **Hot Reference Data Caching:** Department catalogs, staff availability templates, lab test catalogs, and active consent policy lookups are strong candidates for short-TTL Redis caching with explicit write-through invalidation on updates.
-- **Analytics Pre-Aggregation:** Expensive hospital-wide KPIs (monthly occupancy, lab turnaround percentiles, revenue summaries) in `apps/analytics` should leverage **PostgreSQL materialized views** refreshed on a schedule plus Redis response caching keyed by query parameters and time bucket.
-- **Compression & Pagination:** `apps/api` enables `compression` middleware and enforces cursor/keyset or bounded offset pagination on all list endpoints (`patients`, `appointments`, `audit`, `encounters`) to bound memory and network overhead.
+- **Analytics Pre-Aggregation:** Expensive hospital-wide KPIs (monthly occupancy, lab turnaround percentiles, revenue summaries) in `backend/analytics` should leverage **PostgreSQL materialized views** refreshed on a schedule plus Redis response caching keyed by query parameters and time bucket.
+- **Compression & Pagination:** `backend/api` enables `compression` middleware and enforces cursor/keyset or bounded offset pagination on all list endpoints (`patients`, `appointments`, `audit`, `encounters`) to bound memory and network overhead.
 
 ### 8.5 External Integration Resilience (FHIR & Notification Providers)
 

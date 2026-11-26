@@ -18,7 +18,7 @@ export default defineConfig({
       provider: 'v8',
       reporter: ['text', 'lcov', 'html'],
       include: ['src/**/*.ts'],
-      exclude: ['src/server.ts', 'src/types/**', 'prisma/**'],
+      exclude: ['src/server.ts', 'src/types/**', '../../database/**'],
     },
   },
   resolve: {

@@ -83,9 +83,6 @@ docker compose up --build
 ```bash
 # 1. Install dependencies
 npm install
-cd apps/api && npm install
-cd ../web && npm install
-cd ../..
 
 # 2. Start PostgreSQL and Redis (Docker)
 docker compose up postgres redis -d
@@ -95,7 +92,7 @@ cp .env.example .env
 # Edit .env with your database credentials
 
 # 4. Run database migrations and seed
-cd apps/api
+cd backend/api
 npx prisma generate
 npx prisma migrate dev
 npm run db:seed
@@ -108,7 +105,7 @@ npm run dev
 # npm run dev:web  (Next.js on :3000)
 
 # 6. Start analytics service
-cd apps/analytics
+cd backend/analytics
 pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8000
 ```
@@ -160,13 +157,13 @@ Base URL: `http://localhost:4000/api/v1`
 
 ```bash
 # Backend tests
-cd apps/api && npm test
+cd backend/api && npm test
 
 # Frontend tests
-cd apps/web && npm test
+cd frontend && npm test
 
 # Python analytics tests
-cd apps/analytics && python -m pytest tests/ -v
+cd backend/analytics && python -m pytest tests/ -v
 
 # All tests
 npm test
@@ -202,12 +199,12 @@ docker exec -i medicore-postgres psql -U medicore_user medicore_db < backup.sql
 
 ```
 medicore/
-├── apps/
-│   ├── web/           # Next.js frontend
+├── backend/
 │   ├── api/           # Express.js backend
 │   └── analytics/     # FastAPI analytics service
+├── frontend/          # Next.js frontend
+├── database/          # Single Prisma schema, migrations, seeds & docs
 ├── packages/          # Shared types and configs
-├── database/          # Migration docs and schemas
 ├── infrastructure/    # Docker, Nginx, scripts
 ├── docs/              # Architecture documentation
 ├── postman/           # API collection

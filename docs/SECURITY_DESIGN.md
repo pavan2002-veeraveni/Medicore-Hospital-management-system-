@@ -3,7 +3,7 @@
 **Version:** `1.0.0`  
 **Status:** Architecture & Security Baseline  
 **Scope:** Authentication, Authorization (RBAC + Resource-Level), Consent Management, Data Protection, IDOR Prevention, Session Security, Infrastructure Hardening, Audit Trail, Threat Model, Security Headers, Rate Limiting, and Error Handling  
-**Primary Services:** `apps/api` (Express.js + TypeScript + Prisma), `apps/web` (Next.js), `apps/analytics` (FastAPI)
+**Primary Services:** `backend/api` (Express.js + TypeScript + Prisma), `frontend` (Next.js), `backend/analytics` (FastAPI)
 
 ---
 
@@ -30,7 +30,7 @@ MediCore implements stateless short-lived **JWT access tokens** paired with stat
 
 ### 1.1 Password Hashing (Argon2id)
 
-Passwords are never stored in plaintext or reversible formats. Both registration and verification in `apps/api/src/modules/auth/auth.service.ts` use `argon2` configured with the **Argon2id** variant (hybrid of Argon2i side-channel resistance and Argon2d GPU/ASIC resistance):
+Passwords are never stored in plaintext or reversible formats. Both registration and verification in `backend/api/src/modules/auth/auth.service.ts` use `argon2` configured with the **Argon2id** variant (hybrid of Argon2i side-channel resistance and Argon2d GPU/ASIC resistance):
 
 | Parameter | Value / Env Variable | Purpose |
 | :--- | :--- | :--- |
@@ -47,14 +47,14 @@ Passwords are never stored in plaintext or reversible formats. Both registration
 | **Access Token** | `15m` (`JWT_ACCESS_EXPIRY`) | Signed JWT (`jsonwebtoken`) using `JWT_ACCESS_SECRET` (min 32 chars) | `Authorization: Bearer <token>` header | `{ userId, email, roles }` (`JwtPayload`) + `iat` / `exp` |
 | **Refresh Token** | `7d` (`JWT_REFRESH_EXPIRY`) | High-entropy opaque UUID pair (`uuidv4() + '.' + uuidv4()`) stored in `refresh_tokens` | Persisted in DB (`token`, `family`, `expiresAt`, `userAgent`, `ipAddress`); transmitted over HTTPS (`HttpOnly` cookie / secure client payload) | Linked to `User`, `family` UUID, expiration, and revocation metadata |
 
-> **Key Separation:** `JWT_ACCESS_SECRET` and `JWT_REFRESH_SECRET` are strictly distinct secrets validated at startup via Zod in `apps/api/src/config/environment.ts` (each requiring at least 32 characters; startup aborts via `process.exit(1)` in `NODE_ENV=production` if invalid or missing).
+> **Key Separation:** `JWT_ACCESS_SECRET` and `JWT_REFRESH_SECRET` are strictly distinct secrets validated at startup via Zod in `backend/api/src/config/environment.ts` (each requiring at least 32 characters; startup aborts via `process.exit(1)` in `NODE_ENV=production` if invalid or missing).
 
-### 1.3 Service-to-Service Authentication (`apps/analytics`)
+### 1.3 Service-to-Service Authentication (`backend/analytics`)
 
-Internal analytics requests from `apps/api` to the Python FastAPI service (`apps/analytics`) do not accept end-user JWTs directly. Instead, `apps/analytics/app/middleware/auth.py` enforces an `X-API-Key` header check (`verify_api_key`) against `ANALYTICS_API_KEY`:
+Internal analytics requests from `backend/api` to the Python FastAPI service (`backend/analytics`) do not accept end-user JWTs directly. Instead, `backend/analytics/app/middleware/auth.py` enforces an `X-API-Key` header check (`verify_api_key`) against `ANALYTICS_API_KEY`:
 - Missing `X-API-Key` header → `401 Unauthorized`
 - Invalid `X-API-Key` value → `403 Forbidden`
-- End-user RBAC and audit logging remain enforced in `apps/api` before proxying analytics queries.
+- End-user RBAC and audit logging remain enforced in `backend/api` before proxying analytics queries.
 
 ### 1.4 Login Audit & Anti-Enumeration
 
@@ -68,7 +68,7 @@ Internal analytics requests from `apps/api` to the Python FastAPI service (`apps
 sequenceDiagram
     autonumber
     actor Client as Client (Web / API Consumer)
-    participant API as Express API (apps/api)
+    participant API as Express API (backend/api)
     participant AuthSvc as AuthService
     participant DB as PostgreSQL (users, refresh_tokens, audit_logs)
 
@@ -125,7 +125,7 @@ MediCore enforces a **two-tier authorization model**:
 
 ### 2.1 The 7 Hospital Roles
 
-The canonical role enum defined in `apps/api/src/modules/auth/auth.schemas.ts` and `auth.routes.ts` consists of **7 roles**, backed by normalized `roles`, `permissions`, `user_roles`, and `role_permissions` tables in `apps/api/prisma/schema.prisma`:
+The canonical role enum defined in `backend/api/src/modules/auth/auth.schemas.ts` and `auth.routes.ts` consists of **7 roles**, backed by normalized `roles`, `permissions`, `user_roles`, and `role_permissions` tables in `database/schema.prisma`:
 
 | # | Role Code | Persona | Scope & Primary Capabilities |
 | :-: | :--- | :--- | :--- |
@@ -185,7 +185,7 @@ flowchart TD
 
 ## 3. Consent Management
 
-Patient privacy in MediCore is enforced server-side through explicit, purpose-based consent records (`consents` and `consent_history` tables in `apps/api/prisma/schema.prisma`), never left to UI-only toggles.
+Patient privacy in MediCore is enforced server-side through explicit, purpose-based consent records (`consents` and `consent_history` tables in `database/schema.prisma`), never left to UI-only toggles.
 
 ### 3.1 Consent Data Model
 
@@ -206,7 +206,7 @@ Patient privacy in MediCore is enforced server-side through explicit, purpose-ba
 
 1. **Purpose-Specific Verification:** Before performing secondary data use, external FHIR R4 synchronization/export (`/api/v1/fhir/*`), cross-organization `DATA_SHARING`, or non-essential `COMMUNICATION`/`RESEARCH` processing, the service queries `consents` for the target `patientId` and required `category`/`purpose`.
 2. **Expiration & Revocation Checks:** A consent is valid **only** when `status === 'GRANTED'` AND (`expiresAt === null` OR `expiresAt > now()`).
-3. **Fail-Closed Gate:** If a valid consent record is missing, revoked, or expired, the API aborts the operation by throwing `ConsentRequiredError` (`apps/api/src/middleware/errorHandler.ts`), returning HTTP `403 Forbidden` with error code `CONSENT_REQUIRED`, and writes a `DENIED` entry to `audit_logs`.
+3. **Fail-Closed Gate:** If a valid consent record is missing, revoked, or expired, the API aborts the operation by throwing `ConsentRequiredError` (`backend/api/src/middleware/errorHandler.ts`), returning HTTP `403 Forbidden` with error code `CONSENT_REQUIRED`, and writes a `DENIED` entry to `audit_logs`.
 4. **Atomic History Recording:** Granting, renewing, or revoking a consent executes inside a Prisma `$transaction` that updates `consents` and appends an immutable row to `consent_history` simultaneously.
 
 ---
@@ -217,14 +217,14 @@ MediCore protects PHI and PII in transit and at rest through layered input, quer
 
 | Control Area | Implementation | Details & Configuration |
 | :--- | :--- | :--- |
-| **Input Validation & Mass-Assignment Prevention** | `validate({ body, params, query })` (`apps/api/src/middleware/validate.ts`) + **Zod** | Every route parses incoming `body`, `params` (UUID validation), and `query` through strict Zod schemas, stripping unknown/unrecognized fields and rejecting malformed types before business logic runs. |
+| **Input Validation & Mass-Assignment Prevention** | `validate({ body, params, query })` (`backend/api/src/middleware/validate.ts`) + **Zod** | Every route parses incoming `body`, `params` (UUID validation), and `query` through strict Zod schemas, stripping unknown/unrecognized fields and rejecting malformed types before business logic runs. |
 | **SQL Injection Prevention** | **Prisma ORM** (`@prisma/client`) | All database queries use Prisma's parameterized query builder (`findUnique`, `findMany`, `create`, `update`, etc.). Raw SQL (`$queryRaw`) is restricted to tagged template literals (e.g., `SELECT 1` in `/ready`), preventing string-concatenated SQL injection. |
-| **XSS Protection** | Strict JSON API + React/Next.js escaping + **Helmet CSP** | `apps/api` serves `application/json` exclusively (no server-rendered HTML templates outside Swagger UI), enforces `Content-Security-Policy` (`defaultSrc: ["'self'"]`, `scriptSrc: ["'self'"]`), and relies on React's automatic JSX escaping in `apps/web`. |
-| **Payload Size Bounds** | `express.json({ limit })` & `express.urlencoded({ limit })` | Configured via `MAX_REQUEST_SIZE=10mb` in `apps/api/src/app.ts` to mitigate large-payload DoS / memory exhaustion. |
+| **XSS Protection** | Strict JSON API + React/Next.js escaping + **Helmet CSP** | `backend/api` serves `application/json` exclusively (no server-rendered HTML templates outside Swagger UI), enforces `Content-Security-Policy` (`defaultSrc: ["'self'"]`, `scriptSrc: ["'self'"]`), and relies on React's automatic JSX escaping in `frontend`. |
+| **Payload Size Bounds** | `express.json({ limit })` & `express.urlencoded({ limit })` | Configured via `MAX_REQUEST_SIZE=10mb` in `backend/api/src/app.ts` to mitigate large-payload DoS / memory exhaustion. |
 | **Secure Headers** | `helmet` (`^8.0.0`) | Applied globally in `app.ts` (see [Section 10](#10-security-headers)). |
 | **CORS Policy** | `cors` (`^2.8.5`) | Configured with explicit `origin: config.corsOrigin` (`CORS_ORIGIN=http://localhost:3000` in dev; production domain in prod), `credentials: true`, restricted methods (`GET, POST, PUT, PATCH, DELETE, OPTIONS`), and explicit allowed/exposed headers (`Content-Type`, `Authorization`, `X-Request-ID`, `X-Idempotency-Key`). |
 | **Rate Limiting** | `express-rate-limit` (`^7.4.1`) | Global and endpoint-specific throttling (see [Section 11](#11-rate-limiting)). |
-| **Log Redaction** | **Pino** (`apps/api/src/utils/logger.ts`) | Automatically redacts `req.headers.authorization`, `req.headers.cookie`, `password`, `passwordHash`, `token`, and `refreshToken` with `[REDACTED]` so credentials never reach log aggregators. |
+| **Log Redaction** | **Pino** (`backend/api/src/utils/logger.ts`) | Automatically redacts `req.headers.authorization`, `req.headers.cookie`, `password`, `passwordHash`, `token`, and `refreshToken` with `[REDACTED]` so credentials never reach log aggregators. |
 
 ---
 
@@ -242,11 +242,11 @@ Insecure Direct Object Reference (IDOR) vulnerabilities are critical in healthca
 
 ## 6. Session Security
 
-MediCore treats refresh tokens as stateful, revocable session artifacts tracked in the `refresh_tokens` table (`apps/api/prisma/schema.prisma`):
+MediCore treats refresh tokens as stateful, revocable session artifacts tracked in the `refresh_tokens` table (`database/schema.prisma`):
 
 | Session Control | Mechanism | Implementation Reference |
 | :--- | :--- | :--- |
-| **Refresh Token Rotation** | Every call to `POST /api/v1/auth/refresh-token` atomically revokes the presented token (`revokedAt = now()`, `revokedBy = 'TOKEN_ROTATION'`) and issues a fresh access/refresh token pair within a Prisma `$transaction`. | `authService.refreshToken` (`apps/api/src/modules/auth/auth.service.ts`) |
+| **Refresh Token Rotation** | Every call to `POST /api/v1/auth/refresh-token` atomically revokes the presented token (`revokedAt = now()`, `revokedBy = 'TOKEN_ROTATION'`) and issues a fresh access/refresh token pair within a Prisma `$transaction`. | `authService.refreshToken` (`backend/api/src/modules/auth/auth.service.ts`) |
 | **Token Reuse / Theft Detection** | All rotated tokens within a login session share a `family` UUID. If an already-revoked token (`revokedAt !== null`) is replayed, MediCore assumes token theft, immediately revokes **all active tokens in that `family`** (`revokedBy = 'SECURITY_REVOCATION'`), logs a security warning, and forces re-authentication. | `authService.refreshToken` |
 | **Explicit Logout Revocation** | `POST /api/v1/auth/logout` (authenticated) marks the submitted refresh token as revoked (`revokedBy = 'USER_LOGOUT'`) and creates a `LOGOUT` audit log entry. | `authService.logout` & `authController.logout` |
 | **Password Change / Reset Revocation** | Upon password reset or password change (`changePasswordSchema` / `resetPasswordSchema`), all non-revoked `refresh_tokens` belonging to `userId` are revoked (`revokedBy = 'PASSWORD_CHANGE'` / `'PASSWORD_RESET'`), invalidating every active device session. | Auth session lifecycle policy |
@@ -260,22 +260,22 @@ MediCore treats refresh tokens as stateful, revocable session artifacts tracked 
 MediCore's deployment topology isolates public ingress, application runtimes, and stateful data stores:
 
 ### 7.1 Transport Security (HTTPS / TLS)
-- **Edge TLS Termination:** Nginx (`infrastructure/nginx/`) terminates all external client connections over **HTTPS (TLS 1.2 / TLS 1.3)** on port `443`, redirecting HTTP (`:80`) traffic to HTTPS and forwarding requests over the private container network to `apps/web` (`:3000`) and `apps/api` (`:4000`).
-- **Internal Service Isolation:** `apps/analytics` (`:8000`), PostgreSQL (`:5432`), and Redis (`:6379`) are **not** exposed directly to the public internet; `apps/analytics` is reachable only on the internal network with `X-API-Key` authentication.
+- **Edge TLS Termination:** Nginx (`infrastructure/nginx/`) terminates all external client connections over **HTTPS (TLS 1.2 / TLS 1.3)** on port `443`, redirecting HTTP (`:80`) traffic to HTTPS and forwarding requests over the private container network to `frontend` (`:3000`) and `backend/api` (`:4000`).
+- **Internal Service Isolation:** `backend/analytics` (`:8000`), PostgreSQL (`:5432`), and Redis (`:6379`) are **not** exposed directly to the public internet; `backend/analytics` is reachable only on the internal network with `X-API-Key` authentication.
 
 ### 7.2 Container Hardening (Non-Root Execution)
-- Service Dockerfiles (`apps/web`, `apps/api`, `apps/analytics`) use multi-stage builds (compiling TypeScript/Next.js artifacts in a builder stage and copying only runtime dependencies into minimal production images).
+- Service Dockerfiles (`frontend`, `backend/api`, `backend/analytics`) use multi-stage builds (compiling TypeScript/Next.js artifacts in a builder stage and copying only runtime dependencies into minimal production images).
 - Containers drop root privileges and execute under dedicated non-root system users (e.g., `USER node` / unprivileged UID `1001`) with `HEALTHCHECK` directives probing `/health` and `/ready`.
 
 ### 7.3 Private Database Network & Least-Privilege DB Principals
 - PostgreSQL and Redis run inside an isolated private Docker network (`data` / `backend` tier) inaccessible from external hosts in production.
-- **Database Role Separation** (`.env.example`, `apps/analytics/app/config.py`):
-  - `medicore_user` (`DATABASE_URL`): Used by `apps/api` for transactional read/write access (restricted to `SELECT, INSERT` on append-only audit/consent history tables).
-  - `medicore_readonly` (`ANALYTICS_DATABASE_URL`): Used exclusively by `apps/analytics` with `SELECT`-only privileges so analytical workloads or SQL bugs cannot mutate clinical or billing data.
+- **Database Role Separation** (`.env.example`, `backend/analytics/app/config.py`):
+  - `medicore_user` (`DATABASE_URL`): Used by `backend/api` for transactional read/write access (restricted to `SELECT, INSERT` on append-only audit/consent history tables).
+  - `medicore_readonly` (`ANALYTICS_DATABASE_URL`): Used exclusively by `backend/analytics` with `SELECT`-only privileges so analytical workloads or SQL bugs cannot mutate clinical or billing data.
 
 ### 7.4 Secret Management
 - Secrets (`JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`, `DATABASE_URL`, `REDIS_PASSWORD`, `ANALYTICS_API_KEY`, `SMTP_PASS`, `SMS_API_KEY`, `FHIR_AUTH_TOKEN`) are injected exclusively via environment variables or orchestrator secret stores—never hardcoded in source code or committed to git (`.env*` excluded in `.gitignore`).
-- `apps/api/src/config/environment.ts` validates all critical environment variables at startup using Zod (`envSchema`) and terminates immediately (`process.exit(1)`) in `production` if required secrets are absent or weaker than minimum length (`32` characters for JWT secrets).
+- `backend/api/src/config/environment.ts` validates all critical environment variables at startup using Zod (`envSchema`) and terminates immediately (`process.exit(1)`) in `production` if required secrets are absent or weaker than minimum length (`32` characters for JWT secrets).
 
 ---
 
@@ -285,7 +285,7 @@ Healthcare compliance requires non-repudiation and complete visibility into who 
 
 ### 8.1 Append-Only `audit_logs` Schema
 
-Defined in `apps/api/prisma/schema.prisma` (`AuditLog` model, mapped to `audit_logs`):
+Defined in `database/schema.prisma` (`AuditLog` model, mapped to `audit_logs`):
 
 | Field | Type | Purpose |
 | :--- | :--- | :--- |
@@ -305,9 +305,9 @@ Defined in `apps/api/prisma/schema.prisma` (`AuditLog` model, mapped to `audit_l
 ### 8.2 Immutability & Request Correlation
 
 - **Append-Only Enforcement:** `audit_logs` has no `updatedAt` column and no update/delete API endpoints. At the database layer, `medicore_user` is granted only `SELECT` and `INSERT` on `audit_logs` (backed by defensive `BEFORE UPDATE OR DELETE` PostgreSQL triggers rejecting modification).
-- **Non-Blocking Failure Safety:** `createAuditLog()` (`apps/api/src/middleware/audit.ts`) catches persistence errors and logs them via Pino so audit DB transient errors do not crash user responses while still alerting operations.
+- **Non-Blocking Failure Safety:** `createAuditLog()` (`backend/api/src/middleware/audit.ts`) catches persistence errors and logs them via Pino so audit DB transient errors do not crash user responses while still alerting operations.
 - **Automatic Route Auditing:** `auditMiddleware(action, resourceType)` wraps `res.json` to emit `SUCCESS` audit records automatically for `2xx` responses with the resolved `resourceId`.
-- **End-to-End Correlation (`X-Request-ID`):** `requestIdMiddleware` (`apps/api/src/middleware/requestId.ts`) reads incoming `X-Request-ID` or generates a UUID v4, attaches `req.requestId`, returns `X-Request-ID` in response headers, and propagates it to `AuditLog.requestId`, Pino structured logs, and API error responses.
+- **End-to-End Correlation (`X-Request-ID`):** `requestIdMiddleware` (`backend/api/src/middleware/requestId.ts`) reads incoming `X-Request-ID` or generates a UUID v4, attaches `req.requestId`, returns `X-Request-ID` in response headers, and propagates it to `AuditLog.requestId`, Pino structured logs, and API error responses.
 
 ---
 
@@ -318,8 +318,8 @@ Defined in `apps/api/prisma/schema.prisma` (`AuditLog` model, mapped to `audit_l
 | 1 | **Broken Object Level Authorization (IDOR)** | A patient or clinician swaps `:id` in `/patients/:id`, `/encounters/:id`, or `/invoices/:id` to view another person's PHI or billing records. | Critical (Unauthorized PHI exposure) | Mandatory ownership/care-team scoping in service/repository queries using `req.user.userId`; parent-child relationship verification; `DENIED` audit logging. |
 | 2 | **Broken Authentication & Credential Stuffing** | Automated brute-force against `/auth/login`, weak password hashes leaked, or stolen refresh tokens replayed. | Critical (Account takeover) | Argon2id (`64 MiB`, `t=3`, `p=4`), strict auth rate limiting (`10 req / 15m`), generic `401` responses (no user enumeration), 15m access JWTs, refresh token rotation + `family` reuse revocation, login audit trail. |
 | 3 | **Privilege Escalation (Vertical / Mass Assignment)** | Attacker registers with `role: "HOSPITAL_ADMIN"` or injects `isActive` / `roles` into profile update payloads. | Critical (Full system compromise) | Zod schema validation strips unexpected fields; production registration locks public signup to `PATIENT`; `authorize(...allowedRoles)` checks signed JWT roles on every route. |
-| 4 | **SQL Injection** | Malicious SQL payloads in search queries, filters, or IDs targeting PostgreSQL PHI tables. | Critical (DB dump / tampering) | Prisma ORM parameterized queries throughout `apps/api`; Zod UUID/enum/type validation before DB layer; `medicore_readonly` isolation for `apps/analytics`. |
-| 5 | **Cross-Site Scripting (XSS)** | Stored malicious script in patient notes, names, or addresses executing in clinician/admin browsers. | High (Session/token theft, unauthorized clinical actions) | Strict JSON API responses, Helmet `Content-Security-Policy` (`script-src 'self'`), Zod input constraints, React automatic output encoding in `apps/web`, `HttpOnly` refresh token cookies. |
+| 4 | **SQL Injection** | Malicious SQL payloads in search queries, filters, or IDs targeting PostgreSQL PHI tables. | Critical (DB dump / tampering) | Prisma ORM parameterized queries throughout `backend/api`; Zod UUID/enum/type validation before DB layer; `medicore_readonly` isolation for `backend/analytics`. |
+| 5 | **Cross-Site Scripting (XSS)** | Stored malicious script in patient notes, names, or addresses executing in clinician/admin browsers. | High (Session/token theft, unauthorized clinical actions) | Strict JSON API responses, Helmet `Content-Security-Policy` (`script-src 'self'`), Zod input constraints, React automatic output encoding in `frontend`, `HttpOnly` refresh token cookies. |
 | 6 | **Unauthorized PHI Sharing / Consent Bypass** | Exporting patient records via `/fhir/*` or sharing clinical data after a patient has revoked consent. | High (HIPAA/GDPR violation) | Server-side `Consent` status + `expiresAt` check before FHIR sync/export or secondary sharing; throws `403 CONSENT_REQUIRED`; immutable `consent_history` & `audit_logs`. |
 | 7 | **Sensitive Data Exposure in Logs & Errors** | Stack traces, Prisma SQL errors, JWTs, or passwords leaked in HTTP 500 responses or JSON logs. | High (Reconnaissance / credential leak) | Global `errorHandler` maps Prisma/Zod errors to safe codes and returns generic `500 INTERNAL_ERROR`; Pino `redact` masks `authorization`, `cookie`, `password`, `passwordHash`, `token`, `refreshToken`. |
 | 8 | **Race Conditions & Double-Booking / Double-Charging** | Concurrent `POST /appointments` or `POST /payments` requests bypassing availability or balance checks. | Medium-High (Clinical conflict / financial loss) | PostgreSQL transactions (`prisma.$transaction`), database exclusion/unique constraints, and `idempotency_records` / `Idempotency-Key` deduplication. |
@@ -330,7 +330,7 @@ Defined in `apps/api/prisma/schema.prisma` (`AuditLog` model, mapped to `audit_l
 
 ## 10. Security Headers
 
-`apps/api/src/app.ts` configures **Helmet (`^8.0.0`)** as the first middleware in the Express pipeline before route handlers:
+`backend/api/src/app.ts` configures **Helmet (`^8.0.0`)** as the first middleware in the Express pipeline before route handlers:
 
 ```typescript
 app.use(helmet({
@@ -351,7 +351,7 @@ app.use(helmet({
 | Header | Configured / Default Value | Security Purpose |
 | :--- | :--- | :--- |
 | **`Content-Security-Policy`** | `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:` | Blocks unauthorized inline scripts, remote script injection, and unexpected object/frame origins. |
-| **`Cross-Origin-Resource-Policy`** | `cross-origin` | Permits controlled cross-origin API/asset consumption by the decoupled `apps/web` origin. |
+| **`Cross-Origin-Resource-Policy`** | `cross-origin` | Permits controlled cross-origin API/asset consumption by the decoupled `frontend` origin. |
 | **`Strict-Transport-Security`** | Helmet default (`max-age=15552000; includeSubDomains` / reinforced at Nginx TLS edge) | Forces browsers to use HTTPS and prevents SSL-stripping downgrade attacks. |
 | **`X-Content-Type-Options`** | `nosniff` | Prevents browsers from MIME-sniffing responses away from declared `application/json`. |
 | **`X-Frame-Options`** | `SAMEORIGIN` | Mitigates clickjacking by preventing unauthorized framing of API/Swagger endpoints. |
@@ -362,7 +362,7 @@ app.use(helmet({
 
 ## 11. Rate Limiting
 
-MediCore applies **multi-tier rate limiting** using `express-rate-limit` (`^7.4.1`) in `apps/api/src/app.ts` (backed by Redis in multi-replica deployments) complemented by Nginx edge connection/request throttling.
+MediCore applies **multi-tier rate limiting** using `express-rate-limit` (`^7.4.1`) in `backend/api/src/app.ts` (backed by Redis in multi-replica deployments) complemented by Nginx edge connection/request throttling.
 
 ### 11.1 Configured & Tiered Limits
 
@@ -379,7 +379,7 @@ MediCore applies **multi-tier rate limiting** using `express-rate-limit` (`^7.4.
 ### 11.2 Rate-Limit Headers & `429` Response Contract
 
 - `standardHeaders: true` emits IETF `RateLimit-*` headers (`RateLimit-Limit`, `RateLimit-Remaining`, `RateLimit-Reset`) and `legacyHeaders: false` disables deprecated `X-RateLimit-*` headers.
-- Exceeding the limit returns HTTP `429 Too Many Requests` with the standardized error envelope (`apps/api/src/app.ts`):
+- Exceeding the limit returns HTTP `429 Too Many Requests` with the standardized error envelope (`backend/api/src/app.ts`):
 
 ```json
 {
@@ -396,7 +396,7 @@ MediCore applies **multi-tier rate limiting** using `express-rate-limit` (`^7.4.
 
 ## 12. Error Handling & Safe Failure
 
-MediCore enforces centralized error normalization in `apps/api/src/middleware/errorHandler.ts`, `notFoundHandler.ts`, and `apps/api/src/utils/apiResponse.ts` so internal implementation details are never leaked to callers.
+MediCore enforces centralized error normalization in `backend/api/src/middleware/errorHandler.ts`, `notFoundHandler.ts`, and `backend/api/src/utils/apiResponse.ts` so internal implementation details are never leaked to callers.
 
 ### 12.1 Zero-Leakage Rules
 

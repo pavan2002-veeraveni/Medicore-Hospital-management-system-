@@ -3,7 +3,7 @@
 **Database Engine:** PostgreSQL 16+  
 **Database Name:** `medicore_db` (schema: `public`)  
 **Total Tables:** 34 (32 Core Domain Entities + 2 Supplementary Clinical/Facility Tables)  
-**Primary Access Layers:** Express.js API (`apps/api` via Prisma Client) & FastAPI Analytics Service (`apps/analytics` via `medicore_readonly`)
+**Primary Access Layers:** Express.js API (`backend/api` via Prisma Client) & FastAPI Analytics Service (`backend/analytics` via `medicore_readonly`)
 
 ---
 
@@ -41,8 +41,8 @@
   - Ephemeral/owned structural links (e.g., `role_permissions`, `user_roles`, `refresh_tokens`) use `ON DELETE CASCADE` where parent lifecycle removal is valid.
 - **Database Role Separation:**
   - `medicore_migrator`: Schema owner used exclusively during CI/CD migrations (`prisma migrate deploy`).
-  - `medicore_user`: Runtime application role used by `apps/api`; granted `SELECT, INSERT, UPDATE, DELETE` on mutable tables, but **`SELECT, INSERT` only** on `audit_logs` and `consent_history`.
-  - `medicore_readonly`: Read-only role used by the Python FastAPI analytics service (`apps/analytics` via `ANALYTICS_DATABASE_URL`).
+  - `medicore_user`: Runtime application role used by `backend/api`; granted `SELECT, INSERT, UPDATE, DELETE` on mutable tables, but **`SELECT, INSERT` only** on `audit_logs` and `consent_history`.
+  - `medicore_readonly`: Read-only role used by the Python FastAPI analytics service (`backend/analytics` via `ANALYTICS_DATABASE_URL`).
 
 ### 1.3 UTC Timestamps & Temporal Precision
 - Every timestamp column uses `TIMESTAMPTZ` (`TIMESTAMP WITH TIME ZONE`), stored internally in UTC.
@@ -1129,7 +1129,7 @@ erDiagram
 
 ## 8. Migration Strategy
 
-MediCore uses **sequential numbered SQL migrations** managed through Prisma Migrate (`apps/api/package.json`: `prisma migrate deploy` / `prisma migrate dev`) and mirrored/documented in `database/migrations/`.
+MediCore uses **sequential numbered SQL migrations** managed through Prisma Migrate (`backend/api/package.json`: `prisma migrate deploy` / `prisma migrate dev`) and stored canonically in `database/migrations/` (alongside `database/schema.prisma`).
 
 ### 8.1 Sequential Numbered Migration Plan
 Because Prisma Schema DSL does not natively express `EXCLUDE USING gist`, `GENERATED ALWAYS AS ... STORED`, `BEFORE UPDATE OR DELETE` triggers, or `REVOKE` statements, migrations are authored with `prisma migrate dev --create-only` and augmented with pure PostgreSQL DDL before application:
@@ -1156,7 +1156,7 @@ Because Prisma Schema DSL does not natively express `EXCLUDE USING gist`, `GENER
 
 ## 9. Seed Data Strategy
 
-Seed data lives in `apps/api/prisma/seed.ts` (invoked via `npm run db:seed`) and modular fixtures under `database/seeds/`. All seed scripts are **idempotent** (`ON CONFLICT DO NOTHING` / Prisma `upsert`) and **environment-gated**.
+Seed data lives in `database/seeds/seed.ts` (invoked via `npm run db:seed` or `npm run db:seed -w backend/api`). All seed scripts are **idempotent** (`ON CONFLICT DO NOTHING` / Prisma `upsert`) and **environment-gated**.
 
 ### 9.1 Environment Gating
 - **All Environments (Production-Safe Reference Seed):**

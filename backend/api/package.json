@@ -4,6 +4,10 @@
   "private": true,
   "description": "MediCore Backend API - Express.js with TypeScript",
   "main": "dist/server.js",
+  "prisma": {
+    "schema": "../../database/schema.prisma",
+    "seed": "tsx ../../database/seeds/seed.ts"
+  },
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
@@ -16,7 +20,7 @@
     "typecheck": "tsc --noEmit",
     "db:migrate": "prisma migrate deploy",
     "db:migrate:dev": "prisma migrate dev",
-    "db:seed": "tsx prisma/seed.ts",
+    "db:seed": "tsx ../../database/seeds/seed.ts",
     "db:reset": "prisma migrate reset --force",
     "db:studio": "prisma studio",
     "db:generate": "prisma generate"

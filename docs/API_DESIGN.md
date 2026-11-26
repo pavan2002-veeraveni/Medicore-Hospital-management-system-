@@ -3,7 +3,7 @@
 **Version:** `1.0.0`  
 **Base URL:** `/api/v1` (Local Dev: `http://localhost:4000/api/v1`)  
 **Protocol:** HTTPS / JSON (`application/json`)  
-**Target Service:** `apps/api` (Express.js + TypeScript + Prisma + PostgreSQL + Redis + BullMQ)  
+**Target Service:** `backend/api` (Express.js + TypeScript + Prisma + PostgreSQL + Redis + BullMQ)  
 **Last Updated:** 2026-11-26
 
 ---

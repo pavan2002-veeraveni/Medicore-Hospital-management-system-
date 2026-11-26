@@ -45,8 +45,8 @@ services:
   # Express.js Backend API
   api:
     build:
-      context: ./apps/api
-      dockerfile: ../../infrastructure/docker/Dockerfile.api
+      context: .
+      dockerfile: infrastructure/docker/Dockerfile.api
     container_name: medicore-api
     restart: unless-stopped
     environment:
@@ -78,8 +78,8 @@ services:
   # Next.js Frontend
   web:
     build:
-      context: ./apps/web
-      dockerfile: ../../infrastructure/docker/Dockerfile.web
+      context: ./frontend
+      dockerfile: ../infrastructure/docker/Dockerfile.web
     container_name: medicore-web
     restart: unless-stopped
     environment:
@@ -96,7 +96,7 @@ services:
   # FastAPI Analytics Service
   analytics:
     build:
-      context: ./apps/analytics
+      context: ./backend/analytics
       dockerfile: ../../infrastructure/docker/Dockerfile.analytics
     container_name: medicore-analytics
     restart: unless-stopped
@@ -122,8 +122,8 @@ services:
   # BullMQ Worker
   worker:
     build:
-      context: ./apps/api
-      dockerfile: ../../infrastructure/docker/Dockerfile.worker
+      context: .
+      dockerfile: infrastructure/docker/Dockerfile.worker
     container_name: medicore-worker
     restart: unless-stopped
     environment:

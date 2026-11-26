@@ -7,14 +7,14 @@ import path from 'path';
 import { z } from 'zod';
 
 /**
- * Load apps/api/.env into unset process.env keys when running outside tests so
+ * Load backend/api/.env into unset process.env keys when running outside tests so
  * direct invocations (`tsx watch`, `node dist/server.js`) match Prisma and Analytics configs.
  */
 function loadDotEnvIfNeeded() {
   if (process.env.NODE_ENV === 'test') return;
   const candidatePaths = [
     path.resolve(process.cwd(), '.env'),
-    path.resolve(process.cwd(), 'apps/api/.env'),
+    path.resolve(process.cwd(), 'backend/api/.env'),
     path.resolve(__dirname, '../../.env'),
   ];
   for (const envPath of candidatePaths) {
