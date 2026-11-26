@@ -242,6 +242,7 @@ See [docs/ASSESSMENT_MAPPING.md](docs/ASSESSMENT_MAPPING.md) for detailed eviden
 
 ## Documentation
 
+- [**End-to-End Project & System Architecture**](docs/END_TO_END_ARCHITECTURE.md)
 - [Codebase Analysis](docs/CODEBASE_ANALYSIS.md)
 - [System Design](docs/SYSTEM_DESIGN.md)
 - [Database Design](docs/DATABASE_DESIGN.md)
