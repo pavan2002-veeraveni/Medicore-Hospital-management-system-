@@ -28,6 +28,7 @@ const envSchema = z.object({
 
   MAX_REQUEST_SIZE: z.string().default('10mb'),
 
+  ANALYTICS_URL: z.string().optional(),
   ANALYTICS_API_KEY: z.string().optional(),
 
   SMTP_HOST: z.string().optional(),
@@ -94,7 +95,11 @@ function loadConfig() {
     rateLimitWindowMs: env.RATE_LIMIT_WINDOW_MS,
     rateLimitMaxRequests: env.RATE_LIMIT_MAX_REQUESTS,
     maxRequestSize: env.MAX_REQUEST_SIZE,
-    analyticsApiKey: (env as any).ANALYTICS_API_KEY,
+    analyticsUrl:
+      (env as any).ANALYTICS_URL ||
+      `http://127.0.0.1:${process.env.ANALYTICS_PORT || 8000}`,
+    analyticsApiKey:
+      (env as any).ANALYTICS_API_KEY || 'change-this-to-a-secure-api-key',
     smtp: {
       host: (env as any).SMTP_HOST,
       port: (env as any).SMTP_PORT,

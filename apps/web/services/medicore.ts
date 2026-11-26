@@ -1,7 +1,5 @@
 import api from '@/lib/api';
 
-const ANALYTICS_URL = process.env.NEXT_PUBLIC_ANALYTICS_URL || 'http://localhost:8000/api/v1';
-
 export const medicoreService = {
   // Auth & Profile
   getProfile: async () => (await api.get('/auth/profile')).data.data,
@@ -83,18 +81,8 @@ export const medicoreService = {
     const res = await fetch(`${base}/health`);
     return res.json();
   },
-  getAnalyticsUtilization: async (apiKey?: string) => {
-    const res = await fetch(`${ANALYTICS_URL}/analytics/appointment-utilization`, {
-      headers: { 'X-API-Key': apiKey || 'change-this-to-a-secure-api-key' },
-    });
-    if (!res.ok) throw new Error('Analytics service unavailable');
-    return res.json();
-  },
-  getAnalyticsWaitTimes: async (apiKey?: string) => {
-    const res = await fetch(`${ANALYTICS_URL}/analytics/waiting-times`, {
-      headers: { 'X-API-Key': apiKey || 'change-this-to-a-secure-api-key' },
-    });
-    if (!res.ok) throw new Error('Analytics service unavailable');
-    return res.json();
-  },
+  getAnalyticsUtilization: async () =>
+    (await api.get('/analytics/appointment-utilization')).data.data,
+  getAnalyticsWaitTimes: async () =>
+    (await api.get('/analytics/waiting-times')).data.data,
 };

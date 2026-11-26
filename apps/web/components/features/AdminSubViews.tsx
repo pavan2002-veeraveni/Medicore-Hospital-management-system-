@@ -227,11 +227,12 @@ export function AdminAuditLogsView() {
 }
 
 export function AdminAnalyticsView() {
-  const { data: waitData, isLoading, error } = useQuery({
+  const { data: waitData, isLoading, error, refetch } = useQuery({
     queryKey: ['analytics', 'wait-times'],
     queryFn: () => medicoreService.getAnalyticsWaitTimes(),
     retry: false,
   });
+  const errMsg = (error as any)?.response?.data?.message || (error as any)?.message || 'Analytics service unavailable';
   return (
     <div className="space-y-6">
       <Breadcrumbs items={[{ label: 'Dashboard', href: '/admin/dashboard' }, { label: 'Analytics' }]} />
@@ -239,7 +240,7 @@ export function AdminAnalyticsView() {
       <Card>
         <CardHeader><CardTitle>Average Waiting Times by Department (Minutes)</CardTitle></CardHeader>
         <CardContent className="h-72">
-          {isLoading ? <LoadingSkeleton /> : error ? <ErrorState message="Analytics service unreachable on port 8000" /> : (
+          {isLoading ? <LoadingSkeleton /> : error ? <ErrorState message={errMsg} onRetry={() => refetch()} /> : (
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={waitData?.by_department || []}>
                 <CartesianGrid strokeDasharray="3 3" />

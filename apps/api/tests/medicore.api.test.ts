@@ -721,4 +721,49 @@ describe('MediCore API - All 20 Mandatory Scenarios & Module Tests', () => {
     expect(markAllRes.status).toBe(200);
     expect(markAllRes.body.data.updatedCount).toBe(1);
   });
+
+  // ===========================================================================
+  // ADDITIONAL COVERAGE: Analytics BFF Proxy RBAC, Key Forwarding & Fail-Safe
+  // ===========================================================================
+  it('22. Enforces HOSPITAL_ADMIN RBAC and proxies FastAPI analytics with server-side X-API-Key', async () => {
+    const admin = await createTestUser({ email: 'adm.an@m.local', firstName: 'A', lastName: 'N', role: 'HOSPITAL_ADMIN' });
+    const doctor = await createTestUser({ email: 'doc.an@m.local', firstName: 'D', lastName: 'N', role: 'DOCTOR' });
+
+    const forbiddenRes = await request(app)
+      .get('/api/v1/analytics/waiting-times')
+      .set('Authorization', `Bearer ${doctor.token}`);
+    expect(forbiddenRes.status).toBe(403);
+
+    const badMetricRes = await request(app)
+      .get('/api/v1/analytics/nonexistent')
+      .set('Authorization', `Bearer ${admin.token}`);
+    expect(badMetricRes.status).toBe(404);
+
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response(JSON.stringify({ by_department: [{ label: 'Cardiology', avg_minutes: 14.5 }] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    );
+
+    try {
+      const okRes = await request(app)
+        .get('/api/v1/analytics/waiting-times')
+        .set('Authorization', `Bearer ${admin.token}`);
+      expect(okRes.status).toBe(200);
+      expect(okRes.body.data.by_department[0].label).toBe('Cardiology');
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      const calledInit = fetchSpy.mock.calls[0]?.[1] as RequestInit | undefined;
+      expect((calledInit?.headers as Record<string, string>)['X-API-Key']).toBeTruthy();
+
+      vi.spyOn(globalThis, 'fetch').mockRejectedValueOnce(new Error('connect ECONNREFUSED'));
+      const downRes = await request(app)
+        .get('/api/v1/analytics/waiting-times')
+        .set('Authorization', `Bearer ${admin.token}`);
+      expect(downRes.status).toBe(503);
+      expect(downRes.body.error.code).toBe('ANALYTICS_UNAVAILABLE');
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
 });

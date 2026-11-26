@@ -374,7 +374,7 @@ export function AdminDashboardView() {
                 </BarChart>
               </ResponsiveContainer>
             ) : (
-              <EmptyState title="Analytics service not connected" description="Start the FastAPI analytics service on port 8000 to view live utilization charts." />
+              <EmptyState title="Analytics data unavailable" description="Ensure the FastAPI analytics microservice is running and reachable from the backend API." />
             )}
           </CardContent>
         </Card>

@@ -36,6 +36,7 @@ import consentRoutes from './modules/consent/consent.routes';
 import auditRoutes from './modules/audit/audit.routes';
 import notificationRoutes from './modules/notifications/notification.routes';
 import fhirRoutes from './modules/fhir/fhir.routes';
+import analyticsRoutes from './modules/analytics/analytics.routes';
 import { setupSwagger } from './config/swagger';
 
 export function createApp(): Express {
@@ -168,6 +169,7 @@ export function createApp(): Express {
   app.use(`${apiV1}/audit-logs`, auditRoutes);
   app.use(`${apiV1}/notifications`, notificationRoutes);
   app.use(`${apiV1}/fhir`, fhirRoutes);
+  app.use(`${apiV1}/analytics`, analyticsRoutes);
 
   // ---------------------------------------------------------------------------
   // Error Handling
