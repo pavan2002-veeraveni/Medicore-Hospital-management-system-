@@ -39,6 +39,8 @@ export const medicoreService = {
     (await api.get('/prescriptions/medications', { params: { search } })).data.data,
   getPrescriptions: async (params?: Record<string, any>) => (await api.get('/prescriptions', { params })).data,
   createPrescription: async (payload: any) => (await api.post('/prescriptions', payload)).data.data,
+  updatePrescriptionStatus: async (id: string, status: string) =>
+    (await api.patch(`/prescriptions/${id}/status`, { status })).data.data,
 
   // Laboratories
   getLabTests: async (params?: Record<string, any>) => (await api.get('/laboratories', { params })).data,

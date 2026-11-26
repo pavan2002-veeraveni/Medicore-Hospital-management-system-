@@ -1,3 +1,3 @@
 'use client';
-import { LaboratoryDashboardView } from '@/components/features/OperationsViews';
-export default function Page() { return <LaboratoryDashboardView />; }
+import { LaboratorySubView } from '@/components/features/OperationsSubViews';
+export default function Page() { return <LaboratorySubView mode="validation" />; }

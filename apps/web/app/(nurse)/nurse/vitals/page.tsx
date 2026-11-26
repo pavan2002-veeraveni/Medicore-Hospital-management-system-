@@ -1,3 +1,3 @@
 'use client';
-import { NurseDashboardView } from '@/components/features/ClinicalViews';
-export default function Page() { return <NurseDashboardView />; }
+import { NurseVitalsView } from '@/components/features/DoctorSubViews';
+export default function Page() { return <NurseVitalsView />; }

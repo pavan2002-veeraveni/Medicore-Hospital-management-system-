@@ -1,3 +1,3 @@
 'use client';
-import { ClinicalEncountersWorkbench } from '@/components/features/ClinicalViews';
-export default function Page() { return <ClinicalEncountersWorkbench />; }
+import { DoctorLabOrdersView } from '@/components/features/DoctorSubViews';
+export default function Page() { return <DoctorLabOrdersView />; }

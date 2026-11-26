@@ -1,3 +1,3 @@
 'use client';
-import { ReceptionistDashboardView } from '@/components/features/OperationsViews';
-export default function Page() { return <ReceptionistDashboardView />; }
+import { ReceptionistQueueView } from '@/components/features/OperationsSubViews';
+export default function Page() { return <ReceptionistQueueView mode="check-in" />; }
