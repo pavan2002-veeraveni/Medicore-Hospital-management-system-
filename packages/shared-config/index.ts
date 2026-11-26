@@ -1,0 +1,17 @@
+export const APPOINTMENT_TRANSITIONS: Record<string, readonly string[]> = {
+  REQUESTED: ['CONFIRMED', 'CANCELLED'],
+  CONFIRMED: ['CHECKED_IN', 'CANCELLED', 'NO_SHOW'],
+  CHECKED_IN: ['IN_PROGRESS'],
+  IN_PROGRESS: ['COMPLETED'],
+  COMPLETED: [],
+  CANCELLED: [],
+  NO_SHOW: [],
+};
+
+export const LAB_ORDER_TRANSITIONS: Record<string, readonly string[]> = {
+  ORDERED: ['SPECIMEN_COLLECTED', 'CANCELLED'],
+  SPECIMEN_COLLECTED: ['PROCESSING', 'CANCELLED'],
+  PROCESSING: ['COMPLETED', 'CANCELLED'],
+  COMPLETED: [],
+  CANCELLED: [],
+};
