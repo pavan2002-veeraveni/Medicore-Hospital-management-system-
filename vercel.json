@@ -1,0 +1,33 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "services": {
+    "frontend": {
+      "root": "frontend",
+      "framework": "nextjs"
+    },
+    "api": {
+      "root": "backend/api",
+      "entrypoint": "src/server.ts",
+      "buildCommand": "npx prisma generate --schema=../../database/schema.prisma",
+      "bindings": [
+        {
+          "type": "service",
+          "service": "analytics",
+          "format": "url",
+          "env": "ANALYTICS_URL"
+        }
+      ]
+    },
+    "analytics": {
+      "root": "backend/analytics",
+      "entrypoint": "main.py"
+    }
+  },
+  "rewrites": [
+    { "source": "/api/v1/(.*)", "destination": { "service": "api" } },
+    { "source": "/api-docs(.*)", "destination": { "service": "api" } },
+    { "source": "/health", "destination": { "service": "api" } },
+    { "source": "/ready", "destination": { "service": "api" } },
+    { "source": "/(.*)", "destination": { "service": "frontend" } }
+  ]
+}

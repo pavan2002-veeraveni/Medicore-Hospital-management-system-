@@ -147,13 +147,13 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
-          cache-dependency-path: backend/analytics/requirements.txt
+          cache-dependency-path: backend/analytics/requirements*.txt
 
       - name: Install dependencies
         working-directory: backend/analytics
         run: |
           pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
 
       - name: Lint with ruff
         working-directory: backend/analytics

@@ -1,6 +1,36 @@
 # =============================================================================
-# MediCore Analytics - Pytest Configuration
+# MediCore Analytics - Project & Tool Configuration
 # =============================================================================
+
+[project]
+name = "medicore-analytics"
+version = "1.0.0"
+description = "MediCore Read-Only FastAPI Clinical & Operational Analytics Service"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi==0.115.5",
+    "uvicorn[standard]==0.32.1",
+    "pydantic==2.10.2",
+    "pydantic-settings==2.6.1",
+    "sqlalchemy==2.0.36",
+    "psycopg2-binary==2.9.10",
+    "pandas==2.2.3",
+    "numpy==2.1.3",
+    "httpx==0.28.0",
+    "python-dotenv==1.0.1",
+    "python-jose[cryptography]==3.3.0",
+    "structlog==24.4.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==8.3.3",
+    "pytest-asyncio==0.24.0",
+    "pytest-cov==6.0.0",
+    "black==24.10.0",
+    "ruff==0.8.0",
+    "mypy==1.13.0",
+]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

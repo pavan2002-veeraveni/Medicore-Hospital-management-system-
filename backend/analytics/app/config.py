@@ -2,6 +2,9 @@
 # MediCore Analytics - Configuration
 # =============================================================================
 
+import os
+
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -34,6 +37,15 @@ class Settings(BaseSettings):
 
     # Logging
     LOG_LEVEL: str = "INFO"
+
+    @model_validator(mode="after")
+    def _fallback_vercel_database_url(self) -> "Settings":
+        # Fall back to shared DATABASE_URL (e.g. Neon on Vercel) when ANALYTICS_DATABASE_URL is unset
+        if "ANALYTICS_DATABASE_URL" not in os.environ and os.environ.get("DATABASE_URL"):
+            self.DATABASE_URL = os.environ["DATABASE_URL"]
+        if self.DATABASE_URL.startswith("postgres://"):
+            self.DATABASE_URL = self.DATABASE_URL.replace("postgres://", "postgresql://", 1)
+        return self
 
 
 settings = Settings()

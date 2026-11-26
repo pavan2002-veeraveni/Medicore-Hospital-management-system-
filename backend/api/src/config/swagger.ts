@@ -2,9 +2,11 @@
 // MediCore API - Swagger/OpenAPI Configuration
 // =============================================================================
 
+import path from 'path';
 import { Express } from 'express';
 import swaggerJsdoc from 'swagger-jsdoc';
 import swaggerUi from 'swagger-ui-express';
+import generatedOpenApi from './openapi.generated.json';
 
 const options: swaggerJsdoc.Options = {
   definition: {
@@ -41,8 +43,12 @@ const options: swaggerJsdoc.Options = {
     },
     servers: [
       {
+        url: '/',
+        description: 'Current server',
+      },
+      {
         url: 'http://localhost:4000',
-        description: 'Development server',
+        description: 'Local development server',
       },
     ],
     components: {
@@ -114,11 +120,21 @@ const options: swaggerJsdoc.Options = {
       { name: 'FHIR', description: 'FHIR R4 interoperability' },
     ],
   },
-  apis: ['./src/modules/**/*.routes.ts'],
+  apis: [
+    path.join(__dirname, '../modules/**/*.routes.ts'),
+    path.join(__dirname, '../modules/**/*.routes.js'),
+    path.join(__dirname, './modules/**/*.routes.ts'),
+    path.resolve(process.cwd(), 'src/modules/**/*.routes.ts'),
+    path.resolve(process.cwd(), 'backend/api/src/modules/**/*.routes.ts'),
+    './src/modules/**/*.routes.ts',
+  ],
 };
 
 export function setupSwagger(app: Express): void {
-  const specs = swaggerJsdoc(options);
+  const specs = swaggerJsdoc(options) as Record<string, any>;
+  if (!specs.paths || Object.keys(specs.paths).length === 0) {
+    specs.paths = generatedOpenApi.paths;
+  }
   app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(specs, {
     customCss: '.swagger-ui .topbar { display: none }',
     customSiteTitle: 'MediCore API Documentation',

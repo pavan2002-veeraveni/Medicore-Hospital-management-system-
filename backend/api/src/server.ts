@@ -2,12 +2,13 @@
 // MediCore API - Server Entry Point
 // =============================================================================
 
+import express from 'express';
 import { createApp } from './app';
 import { config } from './config/environment';
 import { logger } from './utils/logger';
 import { prisma } from './config/database';
 
-const app = createApp();
+const app: express.Express = createApp();
 
 // Graceful shutdown
 const gracefulShutdown = async (signal: string) => {
@@ -32,10 +33,14 @@ process.on('uncaughtException', (error: Error) => {
   process.exit(1);
 });
 
-// Start server
-app.listen(config.port, config.host, () => {
-  logger.info(`🏥 MediCore API running on http://${config.host}:${config.port}`);
-  logger.info(`📚 Swagger docs: http://${config.host}:${config.port}/api-docs`);
-  logger.info(`💚 Health check: http://${config.host}:${config.port}/health`);
-  logger.info(`Environment: ${config.nodeEnv}`);
-});
+// Start HTTP listener outside Vercel serverless runtime
+if (!process.env.VERCEL) {
+  app.listen(config.port, config.host, () => {
+    logger.info(`🏥 MediCore API running on http://${config.host}:${config.port}`);
+    logger.info(`📚 Swagger docs: http://${config.host}:${config.port}/api-docs`);
+    logger.info(`💚 Health check: http://${config.host}:${config.port}/health`);
+    logger.info(`Environment: ${config.nodeEnv}`);
+  });
+}
+
+export default app;

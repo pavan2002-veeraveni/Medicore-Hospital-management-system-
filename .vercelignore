@@ -1,0 +1,22 @@
+# Prevent local dev env files, caches, and non-runtime directories from uploading to Vercel
+.git
+.github
+node_modules
+**/node_modules
+frontend/.next
+backend/api/dist
+backend/analytics/__pycache__
+backend/analytics/**/__pycache__
+.pytest_cache
+.ruff_cache
+.mypy_cache
+coverage
+.env
+.env.*
+**/.env
+**/.env.*
+!*.env.example
+*.log
+docs
+infrastructure
+postman

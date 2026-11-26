@@ -41,6 +41,7 @@ import { setupSwagger } from './config/swagger';
 
 export function createApp(): Express {
   const app = express();
+  app.set('trust proxy', 1);
 
   // ---------------------------------------------------------------------------
   // Security Middleware
@@ -57,10 +58,23 @@ export function createApp(): Express {
     crossOriginResourcePolicy: { policy: 'cross-origin' },
   }));
 
-  const allowedOrigins = config.corsOrigin
-    .split(',')
-    .map((origin) => origin.trim())
-    .filter(Boolean);
+  const vercelOrigins = [
+    process.env.VERCEL_URL,
+    process.env.VERCEL_BRANCH_URL,
+    process.env.VERCEL_PROJECT_PRODUCTION_URL,
+  ]
+    .filter((host): host is string => Boolean(host))
+    .map((host) => `https://${host}`);
+
+  const allowedOrigins = Array.from(
+    new Set([
+      ...config.corsOrigin
+        .split(',')
+        .map((origin) => origin.trim())
+        .filter(Boolean),
+      ...vercelOrigins,
+    ])
+  );
 
   app.use(cors({
     origin: (origin, callback) => {
