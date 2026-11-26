@@ -9,6 +9,7 @@ on:
     branches: [main, develop]
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 env:
   NODE_VERSION: '20'
@@ -32,7 +33,7 @@ jobs:
         ports:
           - 5432:5432
         options: >-
-          --health-cmd pg_isready
+          --health-cmd "pg_isready -U medicore_test -d medicore_test"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
@@ -230,7 +231,7 @@ jobs:
         ports:
           - 5432:5432
         options: >-
-          --health-cmd pg_isready
+          --health-cmd "pg_isready -U medicore_test -d medicore_test"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
@@ -272,8 +273,8 @@ jobs:
     needs: [backend, frontend, analytics, docker, migration-check]
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/develop'
-    environment: staging
-    
+    environment: ${{ vars.STAGING_ENVIRONMENT || 'staging' }}
+
     steps:
       - uses: actions/checkout@v4
       - name: Deploy to staging
@@ -281,13 +282,13 @@ jobs:
 
   deploy-production:
     name: Deploy to Production
-    needs: [deploy-staging]
+    needs: [backend, frontend, analytics, docker, migration-check]
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'
     environment:
-      name: production
-      # Requires manual approval
-    
+      name: ${{ vars.PRODUCTION_ENVIRONMENT || 'production' }}
+      # Requires manual approval in GitHub Settings -> Environments -> production
+
     steps:
       - uses: actions/checkout@v4
       - name: Deploy to production
