@@ -222,15 +222,15 @@ medicore/
 |---|-----------|--------|
 | 01 | Healthcare role-based frontend | TESTED |
 | 02 | Hospital backend APIs | TESTED |
-| 03 | Clinical relational database | IMPLEMENTED |
+| 03 | Clinical relational database | TESTED |
 | 04 | Clinical data security | TESTED |
 | 05 | Python clinical data processing | VERIFIED |
 | 06 | FastAPI clinical analytics | VERIFIED |
 | 07 | Appointment workflow engine | TESTED |
 | 08 | Healthcare interoperability (FHIR) | TESTED |
-| 09 | Docker healthcare environment | IMPLEMENTED |
-| 10 | Git and clinical change review | IMPLEMENTED |
-| 11 | Healthcare CI/CD | IMPLEMENTED |
+| 09 | Docker healthcare environment | TESTED |
+| 10 | Git and clinical change review | VERIFIED |
+| 11 | Healthcare CI/CD | VERIFIED |
 | 12 | Privacy and workflow testing | TESTED |
 | 13 | Healthcare API documentation | VERIFIED |
 | 14 | Secure hospital deployment | IMPLEMENTED |

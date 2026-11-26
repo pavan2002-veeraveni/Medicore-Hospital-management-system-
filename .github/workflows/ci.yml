@@ -79,6 +79,12 @@ jobs:
           DATABASE_URL: postgresql://medicore_test:test_password@localhost:5432/medicore_test
         run: npx prisma migrate deploy
 
+      - name: Seed test database
+        working-directory: apps/api
+        env:
+          DATABASE_URL: postgresql://medicore_test:test_password@localhost:5432/medicore_test
+        run: npm run db:seed
+
       - name: Run tests
         working-directory: apps/api
         env:
@@ -272,7 +278,7 @@ jobs:
     name: Deploy to Staging
     needs: [backend, frontend, analytics, docker, migration-check]
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/develop'
+    if: github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main'
     environment: ${{ vars.STAGING_ENVIRONMENT || 'staging' }}
 
     steps:
