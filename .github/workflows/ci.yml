@@ -70,7 +70,7 @@ jobs:
 
       - name: Lint
         working-directory: apps/api
-        run: npm run lint || true
+        run: npm run lint
 
       - name: Run database migrations
         working-directory: apps/api
@@ -83,6 +83,7 @@ jobs:
         env:
           NODE_ENV: test
           DATABASE_URL: postgresql://medicore_test:test_password@localhost:5432/medicore_test
+          TEST_DATABASE_URL: postgresql://medicore_test:test_password@localhost:5432/medicore_test
           JWT_ACCESS_SECRET: test-access-secret-at-least-32-characters-long
           JWT_REFRESH_SECRET: test-refresh-secret-at-least-32-characters-long
           REDIS_URL: redis://localhost:6379
@@ -114,11 +115,15 @@ jobs:
 
       - name: Lint
         working-directory: apps/web
-        run: npm run lint || true
+        run: npm run lint
+
+      - name: Build
+        working-directory: apps/web
+        run: npm run build
 
       - name: Run tests
         working-directory: apps/web
-        run: npm run test || true
+        run: npm run test -- --reporter=verbose
 
   # =========================================================================
   # Python Analytics Tests
@@ -201,6 +206,9 @@ jobs:
 
       - name: Build API image
         run: docker build -f infrastructure/docker/Dockerfile.api -t medicore-api:test ./apps/api
+
+      - name: Build Web image
+        run: docker build -f infrastructure/docker/Dockerfile.web -t medicore-web:test ./apps/web
 
       - name: Build Analytics image
         run: docker build -f infrastructure/docker/Dockerfile.analytics -t medicore-analytics:test ./apps/analytics

@@ -10,12 +10,13 @@ WORKDIR /app
 # Install dependencies
 FROM base AS deps
 COPY package.json package-lock.json* ./
-RUN npm ci && npm cache clean --force
+RUN if [ -f package-lock.json ]; then npm ci; else npm install --no-audit --no-fund; fi && npm cache clean --force
 
 # Build stage
 FROM base AS builder
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+RUN mkdir -p /app/public
 
 ENV NEXT_TELEMETRY_DISABLED=1
 
