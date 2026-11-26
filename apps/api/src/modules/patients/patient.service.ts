@@ -321,6 +321,9 @@ export class PatientService {
       }
     }
 
+    const callerRoles = requestingUserRoles || [];
+    const canModifyClinicalNotes = callerRoles.some((role) => ['DOCTOR', 'NURSE'].includes(role));
+
     const { emergencyContact, ...patientFields } = data;
 
     const updateData: Prisma.PatientUpdateInput = {};
@@ -348,10 +351,10 @@ export class PatientService {
     if (patientFields.country !== undefined) {
       updateData.country = patientFields.country;
     }
-    if (patientFields.allergies !== undefined) {
+    if (patientFields.allergies !== undefined && canModifyClinicalNotes) {
       updateData.allergies = patientFields.allergies;
     }
-    if (patientFields.medicalNotes !== undefined) {
+    if (patientFields.medicalNotes !== undefined && canModifyClinicalNotes) {
       updateData.medicalNotes = patientFields.medicalNotes;
     }
 

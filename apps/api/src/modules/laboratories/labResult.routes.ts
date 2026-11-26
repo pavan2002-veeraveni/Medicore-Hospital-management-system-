@@ -3,6 +3,7 @@
 // =============================================================================
 
 import { Router } from 'express';
+import { z } from 'zod';
 import { prisma } from '../../config/database';
 import { authenticate, authorize } from '../../middleware/auth';
 import { validate } from '../../middleware/validate';
@@ -13,9 +14,15 @@ import { ForbiddenError, NotFoundError } from '../../middleware/errorHandler';
 
 const router = Router();
 
+const labResultQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+  patientId: z.string().uuid('Invalid patientId format').optional(),
+});
+
 router.use(authenticate);
 
-router.get('/', authorize('LAB_TECHNICIAN', 'DOCTOR', 'NURSE', 'PATIENT'), async (req, res, next) => {
+router.get('/', authorize('LAB_TECHNICIAN', 'DOCTOR', 'NURSE', 'PATIENT'), validate({ query: labResultQuerySchema }), async (req, res, next) => {
   try {
     const page = Math.max(1, Number(req.query.page || 1));
     const limit = Math.min(100, Math.max(1, Number(req.query.limit || 20)));

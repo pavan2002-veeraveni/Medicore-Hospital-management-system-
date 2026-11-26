@@ -57,6 +57,7 @@ export const medicoreService = {
   getInvoices: async (params?: Record<string, any>) => (await api.get('/billing', { params })).data,
   createInvoice: async (payload: any) => (await api.post('/billing', payload)).data.data,
   issueInvoice: async (id: string) => (await api.patch(`/billing/${id}/issue`, {})).data.data,
+  getPayments: async (params?: Record<string, any>) => (await api.get('/payments', { params })).data,
   recordPayment: async (payload: any) => (await api.post('/payments', payload)).data.data,
 
   // Consents

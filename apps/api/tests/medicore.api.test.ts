@@ -25,7 +25,7 @@ import { FhirClient, FhirGatewayTimeoutError } from '../src/integrations/fhir.cl
 
 const app = createApp();
 
-// Helper to register & login synthetic test accounts quickly
+// Helper to register & provision synthetic test accounts quickly without bypassing public /auth/register security
 async function createTestUser(opts: {
   email: string;
   firstName: string;
@@ -33,17 +33,36 @@ async function createTestUser(opts: {
   role: string;
   password?: string;
 }) {
-  const res = await request(app).post('/api/v1/auth/register').send({
+  const password = opts.password || 'Password123!';
+  const regRes = await request(app).post('/api/v1/auth/register').send({
     email: opts.email,
-    password: opts.password || 'Password123!',
+    password,
     firstName: opts.firstName,
     lastName: opts.lastName,
-    role: opts.role,
   });
+
+  if (opts.role === 'PATIENT') {
+    return {
+      token: regRes.body.data.accessToken as string,
+      refreshToken: regRes.body.data.refreshToken as string,
+      user: regRes.body.data.user,
+    };
+  }
+
+  const userId = regRes.body.data.user.id as string;
+  const targetRole = await store.instance.client.role.upsert({
+    where: { name: opts.role },
+    update: {},
+    create: { name: opts.role, description: `${opts.role} role`, isSystem: true },
+  });
+  await store.instance.client.userRole.deleteMany({ where: { userId } });
+  await store.instance.client.userRole.create({ data: { userId, roleId: targetRole.id } });
+
+  const loginRes = await request(app).post('/api/v1/auth/login').send({ email: opts.email, password });
   return {
-    token: res.body.data.accessToken as string,
-    refreshToken: res.body.data.refreshToken as string,
-    user: res.body.data.user,
+    token: loginRes.body.data.accessToken as string,
+    refreshToken: loginRes.body.data.refreshToken as string,
+    user: loginRes.body.data.user,
   };
 }
 
@@ -765,5 +784,88 @@ describe('MediCore API - All 20 Mandatory Scenarios & Module Tests', () => {
     } finally {
       vi.restoreAllMocks();
     }
+  });
+
+  // ===========================================================================
+  // REGRESSION COVERAGE: Security Escalation Guard, Portal RBAC, Auto Lab Completion & Aliases
+  // ===========================================================================
+  it('23. Enforces register role hardening, portal RBAC fixes, lab auto-completion & /api/v1 health aliases', async () => {
+    // Public /auth/register blocks role escalation to HOSPITAL_ADMIN or DOCTOR
+    const escRes = await request(app).post('/api/v1/auth/register').send({
+      email: 'attacker@m.local',
+      password: 'Password123!',
+      firstName: 'Bad',
+      lastName: 'Actor',
+      role: 'HOSPITAL_ADMIN',
+    });
+    expect(escRes.status).toBe(403);
+
+    // Self-registration with DOB & gender auto-creates Patient profile (/patients/me -> 200)
+    const selfPatRes = await request(app).post('/api/v1/auth/register').send({
+      email: 'self.pat@m.local',
+      password: 'Password123!',
+      firstName: 'Self',
+      lastName: 'Patient',
+      phone: '',
+      dateOfBirth: '1994-06-15',
+      gender: 'FEMALE',
+    });
+    expect(selfPatRes.status).toBe(201);
+    expect(selfPatRes.body.data.user.patientId).toBeTruthy();
+
+    const meRes = await request(app)
+      .get('/api/v1/patients/me')
+      .set('Authorization', `Bearer ${selfPatRes.body.data.accessToken}`);
+    expect(meRes.status).toBe(200);
+    expect(meRes.body.data.registrationNumber).toMatch(/^MED-\d{6}$/);
+
+    // DOCTOR can read /staff/doctors and /appointments/available-slots
+    const admin = await createTestUser({ email: 'adm.rg@m.local', firstName: 'A', lastName: 'R', role: 'HOSPITAL_ADMIN' });
+    const doctor = await createTestUser({ email: 'doc.rg@m.local', firstName: 'D', lastName: 'R', role: 'DOCTOR' });
+    const billing = await createTestUser({ email: 'bil.rg@m.local', firstName: 'B', lastName: 'R', role: 'BILLING_OFFICER' });
+    const labTech = await createTestUser({ email: 'lab.rg@m.local', firstName: 'L', lastName: 'R', role: 'LAB_TECHNICIAN' });
+
+    const dept = (await request(app).post('/api/v1/departments').set('Authorization', `Bearer ${admin.token}`).send({ name: 'Gen', code: 'GENR' })).body.data;
+    const docStaff = (await request(app).post('/api/v1/staff').set('Authorization', `Bearer ${admin.token}`).send({
+      userId: doctor.user.id, employeeId: 'EMP-RG1', departmentId: dept.id, joiningDate: '2024-01-01',
+    })).body.data;
+
+    const docList = await request(app).get('/api/v1/staff/doctors').set('Authorization', `Bearer ${doctor.token}`);
+    expect(docList.status).toBe(200);
+
+    const docSlots = await request(app)
+      .get(`/api/v1/appointments/available-slots?doctorId=${docStaff.id}&date=2026-11-30`)
+      .set('Authorization', `Bearer ${doctor.token}`);
+    expect(docSlots.status).toBe(200);
+
+    // BILLING_OFFICER can list patients with clinical notes masked
+    const bilPatients = await request(app).get('/api/v1/patients').set('Authorization', `Bearer ${billing.token}`);
+    expect(bilPatients.status).toBe(200);
+    expect(bilPatients.body.data[0].medicalNotes).toBeUndefined();
+
+    // Lab result validation transitions LabOrder -> COMPLETED when all items validated
+    const testDef = (await request(app).post('/api/v1/laboratories').set('Authorization', `Bearer ${admin.token}`).send({
+      name: 'CBC Reg', code: 'CBC-R', category: 'Hematology',
+    })).body.data;
+    const order = (await request(app).post('/api/v1/lab-orders').set('Authorization', `Bearer ${doctor.token}`).send({
+      patientId: meRes.body.data.id, items: [{ testId: testDef.id }],
+    })).body.data;
+    await request(app).post(`/api/v1/lab-orders/${order.id}/collect`).set('Authorization', `Bearer ${labTech.token}`).send({});
+    const labRes = (await request(app).post(`/api/v1/lab-orders/${order.id}/results`).set('Authorization', `Bearer ${labTech.token}`).send({
+      labOrderItemId: order.items[0].id, value: '7200', numericValue: 7200,
+    })).body.data;
+    const valRes = await request(app).patch(`/api/v1/lab-results/${labRes.id}/validate`).set('Authorization', `Bearer ${labTech.token}`).send({});
+    expect(valRes.status).toBe(200);
+    expect(valRes.body.data.labOrderItem.labOrder.status).toBe('COMPLETED');
+
+    // Invalid patientId on /lab-results returns 400 (not 500)
+    const badLabQuery = await request(app).get('/api/v1/lab-results?patientId=not-a-uuid').set('Authorization', `Bearer ${labTech.token}`);
+    expect(badLabQuery.status).toBe(400);
+
+    // /api/v1/health & /api/v1/ready aliases exist
+    const v1Health = await request(app).get('/api/v1/health');
+    expect(v1Health.status).toBe(200);
+    const v1Ready = await request(app).get('/api/v1/ready');
+    expect(v1Ready.status).toBe(200);
   });
 });

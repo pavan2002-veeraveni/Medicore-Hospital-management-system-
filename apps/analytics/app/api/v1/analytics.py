@@ -3,7 +3,7 @@
 # =============================================================================
 
 from datetime import date
-from typing import Optional
+from typing import Annotated
 
 import structlog
 from fastapi import APIRouter, HTTPException, Query
@@ -28,23 +28,22 @@ analytics_service = AnalyticsService()
     description="Analyze appointment slot utilization rates by department, doctor, and time period.",
 )
 async def appointment_utilization(
-    date_from: Optional[date] = Query(None, description="Start date"),
-    date_to: Optional[date] = Query(None, description="End date"),
-    department_id: Optional[str] = Query(None, description="Filter by department"),
-    doctor_id: Optional[str] = Query(None, description="Filter by doctor"),
+    date_from: Annotated[date | None, Query(description="Start date")] = None,
+    date_to: Annotated[date | None, Query(description="End date")] = None,
+    department_id: Annotated[str | None, Query(description="Filter by department")] = None,
+    doctor_id: Annotated[str | None, Query(description="Filter by doctor")] = None,
 ):
     """Calculate appointment utilization metrics."""
     try:
-        result = await analytics_service.get_appointment_utilization(
+        return await analytics_service.get_appointment_utilization(
             date_from=date_from,
             date_to=date_to,
             department_id=department_id,
             doctor_id=doctor_id,
         )
-        return result
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, LookupError) as e:
         logger.error("appointment_utilization_error", error=str(e))
-        raise HTTPException(status_code=500, detail="Failed to generate utilization report")
+        raise HTTPException(status_code=500, detail="Failed to generate utilization report") from e
 
 
 @router.get(
@@ -54,21 +53,20 @@ async def appointment_utilization(
     description="Analyze patient waiting times from check-in to encounter start.",
 )
 async def waiting_times(
-    date_from: Optional[date] = Query(None, description="Start date"),
-    date_to: Optional[date] = Query(None, description="End date"),
-    department_id: Optional[str] = Query(None, description="Filter by department"),
+    date_from: Annotated[date | None, Query(description="Start date")] = None,
+    date_to: Annotated[date | None, Query(description="End date")] = None,
+    department_id: Annotated[str | None, Query(description="Filter by department")] = None,
 ):
     """Calculate waiting time metrics."""
     try:
-        result = await analytics_service.get_waiting_times(
+        return await analytics_service.get_waiting_times(
             date_from=date_from,
             date_to=date_to,
             department_id=department_id,
         )
-        return result
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, LookupError) as e:
         logger.error("waiting_times_error", error=str(e))
-        raise HTTPException(status_code=500, detail="Failed to generate waiting time report")
+        raise HTTPException(status_code=500, detail="Failed to generate waiting time report") from e
 
 
 @router.get(
@@ -78,23 +76,22 @@ async def waiting_times(
     description="Analyze laboratory test turnaround times from order to result.",
 )
 async def lab_turnaround(
-    date_from: Optional[date] = Query(None, description="Start date"),
-    date_to: Optional[date] = Query(None, description="End date"),
-    category: Optional[str] = Query(None, description="Test category"),
-    priority: Optional[str] = Query(None, description="Order priority"),
+    date_from: Annotated[date | None, Query(description="Start date")] = None,
+    date_to: Annotated[date | None, Query(description="End date")] = None,
+    category: Annotated[str | None, Query(description="Test category")] = None,
+    priority: Annotated[str | None, Query(description="Order priority")] = None,
 ):
     """Calculate laboratory turnaround metrics."""
     try:
-        result = await analytics_service.get_lab_turnaround(
+        return await analytics_service.get_lab_turnaround(
             date_from=date_from,
             date_to=date_to,
             category=category,
             priority=priority,
         )
-        return result
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, LookupError) as e:
         logger.error("lab_turnaround_error", error=str(e))
-        raise HTTPException(status_code=500, detail="Failed to generate turnaround report")
+        raise HTTPException(status_code=500, detail="Failed to generate turnaround report") from e
 
 
 @router.get(
@@ -106,8 +103,7 @@ async def lab_turnaround(
 async def patient_population():
     """Generate patient population analytics using synthetic data."""
     try:
-        result = await analytics_service.get_patient_population()
-        return result
-    except Exception as e:
+        return await analytics_service.get_patient_population()
+    except (RuntimeError, ValueError, TypeError, LookupError) as e:
         logger.error("patient_population_error", error=str(e))
-        raise HTTPException(status_code=500, detail="Failed to generate population report")
+        raise HTTPException(status_code=500, detail="Failed to generate population report") from e

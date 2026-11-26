@@ -86,6 +86,10 @@ export function useInvoices(params?: Record<string, any>, enabled = true) {
   return useQuery({ queryKey: ['invoices', params], queryFn: () => medicoreService.getInvoices(params), enabled });
 }
 
+export function usePayments(params?: Record<string, any>, enabled = true) {
+  return useQuery({ queryKey: ['payments', params], queryFn: () => medicoreService.getPayments(params), enabled });
+}
+
 export function useConsents(params?: Record<string, any>, enabled = true) {
   return useQuery({ queryKey: ['consents', params], queryFn: () => medicoreService.getConsents(params), enabled });
 }
@@ -98,10 +102,10 @@ export function useAuditLogs(params?: Record<string, any>, enabled = true) {
   return useQuery({ queryKey: ['audit-logs', params], queryFn: () => medicoreService.getAuditLogs(params), enabled });
 }
 
-export function useNotifications() {
-  return useQuery({ queryKey: ['notifications'], queryFn: () => medicoreService.getNotifications({ limit: 20 }) });
+export function useNotifications(enabled = true) {
+  return useQuery({ queryKey: ['notifications'], queryFn: () => medicoreService.getNotifications({ limit: 20 }), enabled });
 }
 
-export function useUnreadNotificationCount() {
-  return useQuery({ queryKey: ['notifications', 'unread'], queryFn: medicoreService.getUnreadCount, refetchInterval: 30000 });
+export function useUnreadNotificationCount(enabled = true) {
+  return useQuery({ queryKey: ['notifications', 'unread'], queryFn: medicoreService.getUnreadCount, enabled, refetchInterval: 30000 });
 }

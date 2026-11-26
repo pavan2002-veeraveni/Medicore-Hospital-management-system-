@@ -7,16 +7,24 @@ import argon2 from 'argon2';
 import { v4 as uuidv4 } from 'uuid';
 import { prisma } from '../../config/database';
 import { config } from '../../config/environment';
-import { UnauthorizedError, ConflictError, NotFoundError, ValidationError } from '../../middleware/errorHandler';
+import { UnauthorizedError, ConflictError, NotFoundError, ValidationError, ForbiddenError } from '../../middleware/errorHandler';
 import { logger } from '../../utils/logger';
 import { JwtPayload } from '../../middleware/auth';
 import type { LoginInput, RegisterInput, RefreshTokenInput } from './auth.schemas';
 
 export class AuthService {
   /**
-   * Register a new user
+   * Register a new user. Unauthenticated self-registration is strictly restricted
+   * to PATIENT accounts; staff roles require HOSPITAL_ADMIN authorization.
    */
-  async register(input: RegisterInput) {
+  async register(input: RegisterInput, actorRoles?: string[]) {
+    const requestedRole = input.role || 'PATIENT';
+    if (requestedRole !== 'PATIENT' && !actorRoles?.includes('HOSPITAL_ADMIN')) {
+      throw new ForbiddenError(
+        'Self-registration is restricted to PATIENT accounts. Administrator authorization is required for staff roles.'
+      );
+    }
+
     // Check for existing user
     const existing = await prisma.user.findUnique({
       where: { email: input.email.toLowerCase() },
@@ -35,7 +43,7 @@ export class AuthService {
     });
 
     // Find or create role
-    const roleName = input.role || 'PATIENT';
+    const roleName = requestedRole;
     let role = await prisma.role.findUnique({ where: { name: roleName } });
     if (!role) {
       role = await prisma.role.create({
@@ -43,8 +51,8 @@ export class AuthService {
       });
     }
 
-    // Create user with role in a transaction
-    const user = await prisma.$transaction(async (tx) => {
+    // Create user, role, and optional self-registered patient profile in a transaction
+    const { user, patientId } = await prisma.$transaction(async (tx) => {
       const newUser = await tx.user.create({
         data: {
           email: input.email.toLowerCase(),
@@ -62,14 +70,36 @@ export class AuthService {
         },
       });
 
-      return newUser;
+      let createdPatientId: string | null = null;
+      if (roleName === 'PATIENT' && input.dateOfBirth && input.gender) {
+        const latestPatient = await tx.patient.findFirst({
+          where: { registrationNumber: { startsWith: 'MED-' } },
+          orderBy: { registrationNumber: 'desc' },
+          select: { registrationNumber: true },
+        });
+        let nextNum = 1;
+        if (latestPatient?.registrationNumber) {
+          const parsedNum = parseInt(latestPatient.registrationNumber.replace('MED-', ''), 10);
+          if (!Number.isNaN(parsedNum)) nextNum = parsedNum + 1;
+        }
+        const registrationNumber = `MED-${String(nextNum).padStart(6, '0')}`;
+        const patient = await tx.patient.create({
+          data: {
+            userId: newUser.id,
+            registrationNumber,
+            dateOfBirth: new Date(input.dateOfBirth),
+            gender: input.gender,
+          },
+        });
+        createdPatientId = patient.id;
+      }
+
+      return { user: newUser, patientId: createdPatientId };
     });
 
     // Generate tokens
     const tokens = await this.generateTokens(user.id, user.email, [roleName]);
 
-    // Auto-create Patient profile when registering as PATIENT?
-    // Keep registration lean; return patientId/staffId if present
     return {
       user: {
         id: user.id,
@@ -77,7 +107,7 @@ export class AuthService {
         firstName: user.firstName,
         lastName: user.lastName,
         roles: [roleName],
-        patientId: null,
+        patientId,
         staffId: null,
       },
       ...tokens,

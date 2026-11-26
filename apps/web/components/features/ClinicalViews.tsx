@@ -13,6 +13,7 @@ import {
   usePrescriptions,
 } from '@/hooks/useMedicore';
 import { medicoreService } from '@/services/medicore';
+import { buildVitalSignsPayload, getApiErrorMessage } from '@/lib/api';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   Breadcrumbs,
@@ -33,10 +34,20 @@ export function DoctorDashboardView() {
   const { data: encRes } = useEncounters({ limit: 20 });
   const { data: labRes } = useLabOrders({ limit: 20 });
   const actionMutation = useAppointmentAction();
+  const [actionErr, setActionErr] = useState('');
 
   const appointments = apptsRes?.data || [];
   const encounters = encRes?.data || [];
   const labOrders = labRes?.data || [];
+
+  const handleAction = async (id: string, action: string) => {
+    setActionErr('');
+    try {
+      await actionMutation.mutateAsync({ id, action });
+    } catch (err: any) {
+      setActionErr(getApiErrorMessage(err, 'Appointment update failed'));
+    }
+  };
 
   return (
     <div className="space-y-8">
@@ -44,6 +55,8 @@ export function DoctorDashboardView() {
         <h1 className="text-2xl font-bold text-gray-900">Doctor Dashboard</h1>
         <p className="text-sm text-gray-500">Assigned appointments, active encounters, and clinical orders</p>
       </div>
+
+      {actionErr && <ErrorState message={actionErr} />}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard icon={Calendar} label="Appointments" value={apptsRes?.meta?.total ?? appointments.length} color="bg-sky-500" />
@@ -66,13 +79,13 @@ export function DoctorDashboardView() {
                   <div className="flex items-center gap-2">
                     <StatusBadge status={apt.status} />
                     {apt.status === 'REQUESTED' && (
-                      <Button size="sm" onClick={() => actionMutation.mutate({ id: apt.id, action: 'confirm' })}>Confirm</Button>
+                      <Button size="sm" onClick={() => handleAction(apt.id, 'confirm')}>Confirm</Button>
                     )}
                     {apt.status === 'CHECKED_IN' && (
-                      <Button size="sm" onClick={() => actionMutation.mutate({ id: apt.id, action: 'start' })}>Start</Button>
+                      <Button size="sm" onClick={() => handleAction(apt.id, 'start')}>Start</Button>
                     )}
                     {apt.status === 'IN_PROGRESS' && (
-                      <Button size="sm" variant="secondary" onClick={() => actionMutation.mutate({ id: apt.id, action: 'complete' })}>Complete</Button>
+                      <Button size="sm" variant="secondary" onClick={() => handleAction(apt.id, 'complete')}>Complete</Button>
                     )}
                   </div>
                 </div>
@@ -88,11 +101,13 @@ export function DoctorDashboardView() {
 export function ClinicalEncountersWorkbench() {
   const qc = useQueryClient();
   const { data: patientsRes } = usePatients({ limit: 50 });
-  const { data: encRes, isLoading, refetch } = useEncounters({ limit: 30 });
+  const { data: apptsRes } = useAppointments({ limit: 40 });
+  const { data: encRes, isLoading, error, refetch } = useEncounters({ limit: 30 });
   const { data: meds } = useMedications();
   const { data: testsRes } = useLabTests();
 
   const [patientId, setPatientId] = useState('');
+  const [appointmentId, setAppointmentId] = useState('');
   const [chiefComplaint, setChiefComplaint] = useState('');
   const [selectedEncounterId, setSelectedEncounterId] = useState('');
   const [diagCode, setDiagCode] = useState('I10');
@@ -101,48 +116,98 @@ export function ClinicalEncountersWorkbench() {
   const [dosage, setDosage] = useState('10mg');
   const [testId, setTestId] = useState('');
   const [feedback, setFeedback] = useState('');
+  const [errMsg, setErrMsg] = useState('');
 
   const patients = patientsRes?.data || [];
+  const appointments = (apptsRes?.data || []).filter(
+    (a: any) => ['CHECKED_IN', 'IN_PROGRESS'].includes(a.status) && (!patientId || a.patientId === patientId)
+  );
   const encounters = encRes?.data || [];
   const tests = testsRes?.data || [];
+  const selectedEnc = encounters.find((x: any) => x.id === selectedEncounterId);
 
   const handleCreateEncounter = async (e: React.FormEvent) => {
     e.preventDefault();
-    const enc = await medicoreService.createEncounter({ patientId, type: 'OUTPATIENT', chiefComplaint });
-    setSelectedEncounterId(enc.id);
-    setChiefComplaint('');
-    setFeedback('Encounter started');
-    qc.invalidateQueries({ queryKey: ['encounters'] });
+    setFeedback('');
+    setErrMsg('');
+    try {
+      const enc = await medicoreService.createEncounter({
+        patientId,
+        appointmentId: appointmentId || undefined,
+        type: 'OUTPATIENT',
+        chiefComplaint,
+      });
+      setSelectedEncounterId(enc.id);
+      setAppointmentId('');
+      setChiefComplaint('');
+      setFeedback('Encounter started');
+      qc.invalidateQueries({ queryKey: ['encounters'] });
+      qc.invalidateQueries({ queryKey: ['appointments'] });
+    } catch (err: any) {
+      setErrMsg(getApiErrorMessage(err, 'Failed to start encounter'));
+    }
+  };
+
+  const handleCompleteEncounter = async (encId: string) => {
+    setFeedback('');
+    setErrMsg('');
+    try {
+      await medicoreService.completeEncounter(encId);
+      if (selectedEncounterId === encId) setSelectedEncounterId('');
+      setFeedback('Encounter completed');
+      qc.invalidateQueries({ queryKey: ['encounters'] });
+      qc.invalidateQueries({ queryKey: ['appointments'] });
+    } catch (err: any) {
+      setErrMsg(getApiErrorMessage(err, 'Failed to complete encounter'));
+    }
   };
 
   const handleAddDiagnosis = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedEncounterId) return;
-    await medicoreService.addDiagnosis({ encounterId: selectedEncounterId, code: diagCode, description: diagDesc, type: 'PRIMARY' });
-    setFeedback('Diagnosis recorded');
-    refetch();
+    setFeedback('');
+    setErrMsg('');
+    try {
+      await medicoreService.addDiagnosis({ encounterId: selectedEncounterId, code: diagCode, description: diagDesc, type: 'PRIMARY' });
+      setFeedback('Diagnosis recorded');
+      refetch();
+    } catch (err: any) {
+      setErrMsg(getApiErrorMessage(err, 'Failed to record diagnosis'));
+    }
   };
 
   const handlePrescribe = async (e: React.FormEvent) => {
     e.preventDefault();
     const enc = encounters.find((x: any) => x.id === selectedEncounterId);
     if (!enc || !medId) return;
-    await medicoreService.createPrescription({
-      encounterId: enc.id,
-      patientId: enc.patientId,
-      items: [{ medicationId: medId, dosage, frequency: 'Once daily', duration: '30 days', quantity: 30 }],
-    });
-    setFeedback('Prescription created');
-    qc.invalidateQueries({ queryKey: ['prescriptions'] });
+    setFeedback('');
+    setErrMsg('');
+    try {
+      await medicoreService.createPrescription({
+        encounterId: enc.id,
+        patientId: enc.patientId,
+        items: [{ medicationId: medId, dosage, frequency: 'Once daily', duration: '30 days', quantity: 30 }],
+      });
+      setFeedback('Prescription created');
+      qc.invalidateQueries({ queryKey: ['prescriptions'] });
+    } catch (err: any) {
+      setErrMsg(getApiErrorMessage(err, 'Failed to create prescription'));
+    }
   };
 
   const handleOrderLab = async (e: React.FormEvent) => {
     e.preventDefault();
     const enc = encounters.find((x: any) => x.id === selectedEncounterId);
     if (!enc || !testId) return;
-    await medicoreService.createLabOrder({ patientId: enc.patientId, encounterId: enc.id, items: [{ testId }], priority: 'ROUTINE' });
-    setFeedback('Lab order submitted');
-    qc.invalidateQueries({ queryKey: ['lab-orders'] });
+    setFeedback('');
+    setErrMsg('');
+    try {
+      await medicoreService.createLabOrder({ patientId: enc.patientId, encounterId: enc.id, items: [{ testId }], priority: 'ROUTINE' });
+      setFeedback('Lab order submitted');
+      qc.invalidateQueries({ queryKey: ['lab-orders'] });
+    } catch (err: any) {
+      setErrMsg(getApiErrorMessage(err, 'Failed to submit lab order'));
+    }
   };
 
   return (
@@ -150,16 +215,23 @@ export function ClinicalEncountersWorkbench() {
       <Breadcrumbs items={[{ label: 'Dashboard', href: '/doctor/dashboard' }, { label: 'Encounters' }]} />
       <h1 className="text-2xl font-bold text-gray-900">Clinical Encounters Workbench</h1>
       {feedback && <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-3 text-sm text-emerald-800">{feedback}</div>}
+      {errMsg && <ErrorState message={errMsg} />}
 
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>
           <CardHeader><CardTitle>Start New Encounter</CardTitle></CardHeader>
           <CardContent>
             <form onSubmit={handleCreateEncounter} className="space-y-3">
-              <select value={patientId} onChange={(e) => setPatientId(e.target.value)} required className="w-full rounded-lg border px-3 py-2 text-sm">
+              <select value={patientId} onChange={(e) => { setPatientId(e.target.value); setAppointmentId(''); }} required className="w-full rounded-lg border px-3 py-2 text-sm">
                 <option value="">Select patient...</option>
                 {patients.map((p: any) => (
                   <option key={p.id} value={p.id}>{p.user?.firstName} {p.user?.lastName} ({p.registrationNumber})</option>
+                ))}
+              </select>
+              <select value={appointmentId} onChange={(e) => setAppointmentId(e.target.value)} className="w-full rounded-lg border px-3 py-2 text-sm">
+                <option value="">Optional: Link checked-in appointment...</option>
+                {appointments.map((a: any) => (
+                  <option key={a.id} value={a.id}>{a.patient?.user?.firstName} {a.patient?.user?.lastName} — {new Date(a.scheduledStart).toLocaleString()}</option>
                 ))}
               </select>
               <input value={chiefComplaint} onChange={(e) => setChiefComplaint(e.target.value)} placeholder="Chief complaint" required className="w-full rounded-lg border px-3 py-2 text-sm" />
@@ -169,15 +241,15 @@ export function ClinicalEncountersWorkbench() {
         </Card>
 
         <Card>
-          <CardHeader><CardTitle>Active Encounters</CardTitle></CardHeader>
+          <CardHeader><CardTitle>Active & Recent Encounters</CardTitle></CardHeader>
           <CardContent>
-            {isLoading ? <LoadingSkeleton rows={3} /> : encounters.length === 0 ? <EmptyState title="No encounters" /> : (
+            {isLoading ? <LoadingSkeleton rows={3} /> : error ? <ErrorState onRetry={() => refetch()} /> : encounters.length === 0 ? <EmptyState title="No encounters" /> : (
               <div className="space-y-2 max-h-56 overflow-y-auto">
                 {encounters.map((enc: any) => (
                   <div
                     key={enc.id}
-                    onClick={() => setSelectedEncounterId(enc.id)}
-                    className={`cursor-pointer rounded-lg border p-3 text-sm flex items-center justify-between ${selectedEncounterId === enc.id ? 'border-sky-500 bg-sky-50' : 'hover:bg-gray-50'}`}
+                    onClick={() => enc.status === 'IN_PROGRESS' && setSelectedEncounterId(enc.id)}
+                    className={`rounded-lg border p-3 text-sm flex items-center justify-between ${enc.status === 'IN_PROGRESS' ? 'cursor-pointer ' : 'opacity-75 '}${selectedEncounterId === enc.id ? 'border-sky-500 bg-sky-50' : 'hover:bg-gray-50'}`}
                   >
                     <div>
                       <p className="font-medium">{enc.patient?.user?.firstName} {enc.patient?.user?.lastName}</p>
@@ -186,7 +258,7 @@ export function ClinicalEncountersWorkbench() {
                     <div className="flex items-center gap-2">
                       <StatusBadge status={enc.status} />
                       {enc.status === 'IN_PROGRESS' && (
-                        <Button size="sm" variant="outline" onClick={(ev) => { ev.stopPropagation(); medicoreService.completeEncounter(enc.id).then(() => refetch()); }}>
+                        <Button size="sm" variant="outline" onClick={(ev) => { ev.stopPropagation(); handleCompleteEncounter(enc.id); }}>
                           Complete
                         </Button>
                       )}
@@ -199,7 +271,7 @@ export function ClinicalEncountersWorkbench() {
         </Card>
       </div>
 
-      {selectedEncounterId && (
+      {selectedEnc?.status === 'IN_PROGRESS' && (
         <div className="grid gap-6 lg:grid-cols-3">
           <Card>
             <CardHeader><CardTitle>Add Diagnosis</CardTitle></CardHeader>
@@ -254,22 +326,25 @@ export function NurseDashboardView() {
   const [weight, setWeight] = useState('70');
   const [height, setHeight] = useState('172');
   const [savedMsg, setSavedMsg] = useState('');
+  const [errMsg, setErrMsg] = useState('');
 
   const encounters = encRes?.data || [];
 
   const handleSaveVitals = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSavedMsg('');
+    setErrMsg('');
     if (!selectedEncId) return;
-    const res = await medicoreService.recordVitals(selectedEncId, {
-      temperature: Number(temp),
-      bpSystolic: Number(sys),
-      bpDiastolic: Number(dia),
-      heartRate: Number(hr),
-      weight: Number(weight),
-      height: Number(height),
-    });
-    setSavedMsg(`Vitals recorded (BMI: ${res.bmi ?? 'N/A'})`);
-    refetch();
+    try {
+      const res = await medicoreService.recordVitals(
+        selectedEncId,
+        buildVitalSignsPayload({ temperature: temp, bpSystolic: sys, bpDiastolic: dia, heartRate: hr, weight, height })
+      );
+      setSavedMsg(`Vitals recorded (BMI: ${res.bmi ?? 'N/A'})`);
+      refetch();
+    } catch (err: any) {
+      setErrMsg(getApiErrorMessage(err, 'Failed to save vital signs'));
+    }
   };
 
   return (
@@ -285,6 +360,7 @@ export function NurseDashboardView() {
       </div>
 
       {savedMsg && <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-3 text-sm text-emerald-800">{savedMsg}</div>}
+      {errMsg && <ErrorState message={errMsg} />}
 
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>

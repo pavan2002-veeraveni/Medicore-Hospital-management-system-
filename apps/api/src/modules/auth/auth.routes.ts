@@ -5,7 +5,7 @@
 import { Router } from 'express';
 import { authController } from './auth.controller';
 import { validate } from '../../middleware/validate';
-import { authenticate } from '../../middleware/auth';
+import { authenticate, optionalAuth } from '../../middleware/auth';
 import { loginSchema, registerSchema, refreshTokenSchema, changePasswordSchema } from './auth.schemas';
 
 const router = Router();
@@ -34,7 +34,7 @@ const router = Router();
  *       201: { description: User registered successfully }
  *       409: { description: User already exists }
  */
-router.post('/register', validate({ body: registerSchema }), authController.register);
+router.post('/register', optionalAuth, validate({ body: registerSchema }), authController.register);
 
 /**
  * @swagger

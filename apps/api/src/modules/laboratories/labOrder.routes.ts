@@ -95,7 +95,7 @@ router.post(
 router.get(
   '/',
   authenticate,
-  authorize('LAB_TECHNICIAN', 'DOCTOR'),
+  authorize('LAB_TECHNICIAN', 'DOCTOR', 'NURSE', 'HOSPITAL_ADMIN', 'PATIENT'),
   validate({ query: labOrderQuerySchema }),
   laboratoryController.getLabOrders
 );
@@ -204,7 +204,7 @@ router.patch(
 router.post(
   '/:id/collect',
   authenticate,
-  authorize('LAB_TECHNICIAN'),
+  authorize('LAB_TECHNICIAN', 'NURSE'),
   validate({ params: idParamSchema, body: collectSpecimensSchema }),
   laboratoryController.collectSpecimens
 );

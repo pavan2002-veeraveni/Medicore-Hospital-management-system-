@@ -57,13 +57,74 @@ export function createApp(): Express {
     crossOriginResourcePolicy: { policy: 'cross-origin' },
   }));
 
+  const allowedOrigins = config.corsOrigin
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+
   app.use(cors({
-    origin: config.corsOrigin,
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin) || allowedOrigins.includes('*')) {
+        callback(null, true);
+        return;
+      }
+      callback(null, false);
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-ID', 'X-Idempotency-Key'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-ID', 'X-Idempotency-Key', 'Idempotency-Key'],
     exposedHeaders: ['X-Request-ID'],
   }));
+
+  // ---------------------------------------------------------------------------
+  // Health Endpoints (exempt from rate limiting per SECURITY_DESIGN)
+  // ---------------------------------------------------------------------------
+  const healthHandler = (_req: Request, res: Response) => {
+    res.json({
+      success: true,
+      message: 'MediCore API is healthy',
+      data: {
+        status: 'UP',
+        timestamp: new Date().toISOString(),
+        version: config.appVersion,
+      },
+    });
+  };
+
+  const readyHandler = async (_req: Request, res: Response) => {
+    try {
+      await prisma.$queryRaw`SELECT 1`;
+
+      res.json({
+        success: true,
+        message: 'MediCore API is ready',
+        data: {
+          status: 'READY',
+          timestamp: new Date().toISOString(),
+          checks: {
+            database: 'UP',
+          },
+        },
+      });
+    } catch {
+      res.status(503).json({
+        success: false,
+        message: 'Service not ready',
+        data: {
+          status: 'NOT_READY',
+          timestamp: new Date().toISOString(),
+          checks: {
+            database: 'DOWN',
+          },
+        },
+      });
+    }
+  };
+
+  app.get('/health', healthHandler);
+  app.get('/ready', readyHandler);
+  app.get('/api/v1/health', healthHandler);
+  app.get('/api/v1/ready', readyHandler);
 
   // ---------------------------------------------------------------------------
   // Rate Limiting
@@ -94,51 +155,6 @@ export function createApp(): Express {
   app.use(morgan('combined', {
     stream: { write: (message: string) => logger.info(message.trim()) },
   }));
-
-  // ---------------------------------------------------------------------------
-  // Health Endpoints
-  // ---------------------------------------------------------------------------
-  app.get('/health', (_req: Request, res: Response) => {
-    res.json({
-      success: true,
-      message: 'MediCore API is healthy',
-      data: {
-        status: 'UP',
-        timestamp: new Date().toISOString(),
-        version: config.appVersion,
-      },
-    });
-  });
-
-  app.get('/ready', async (_req: Request, res: Response) => {
-    try {
-      await prisma.$queryRaw`SELECT 1`;
-
-      res.json({
-        success: true,
-        message: 'MediCore API is ready',
-        data: {
-          status: 'READY',
-          timestamp: new Date().toISOString(),
-          checks: {
-            database: 'UP',
-          },
-        },
-      });
-    } catch {
-      res.status(503).json({
-        success: false,
-        message: 'Service not ready',
-        data: {
-          status: 'NOT_READY',
-          timestamp: new Date().toISOString(),
-          checks: {
-            database: 'DOWN',
-          },
-        },
-      });
-    }
-  });
 
   // ---------------------------------------------------------------------------
   // Swagger Documentation

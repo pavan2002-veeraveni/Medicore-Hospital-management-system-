@@ -14,8 +14,9 @@ import { createAuditLog } from '../../middleware/audit';
 import { prisma } from '../../config/database';
 import type { PatientQueryInput } from './patient.schemas';
 
-const STAFF_READ_ROLES = ['DOCTOR', 'NURSE', 'RECEPTIONIST', 'HOSPITAL_ADMIN'];
+const STAFF_READ_ROLES = ['DOCTOR', 'NURSE', 'RECEPTIONIST', 'HOSPITAL_ADMIN', 'BILLING_OFFICER', 'LAB_TECHNICIAN'];
 const CLINICAL_ROLES = ['DOCTOR', 'NURSE'];
+const STAFF_PATIENT_CREATOR_ROLES = ['RECEPTIONIST', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE'];
 
 function sanitizePatientRecord<T extends Record<string, any>>(
   patient: T,
@@ -29,7 +30,7 @@ function sanitizePatientRecord<T extends Record<string, any>>(
     return patient;
   }
 
-  // Receptionist and Hospital Admin do not get unrestricted clinical notes/allergies
+  // Receptionist, Billing Officer, Lab Tech, and Hospital Admin get demographics only
   const { medicalNotes: _notes, allergies: _allergies, ...demographicsOnly } = patient;
   return demographicsOnly as T;
 }
@@ -37,8 +38,22 @@ function sanitizePatientRecord<T extends Record<string, any>>(
 export class PatientController {
   async create(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const targetUserId = req.body.userId || req.user!.userId;
-      const patient = await patientService.create(targetUserId, req.body);
+      const userRoles = req.user?.roles || [];
+      const isStaffCreator = userRoles.some((r) => STAFF_PATIENT_CREATOR_ROLES.includes(r));
+
+      if (!isStaffCreator && req.body.userId && req.body.userId !== req.user!.userId) {
+        throw new ForbiddenError('Patients can only create their own patient profile');
+      }
+
+      const targetUserId = isStaffCreator ? req.body.userId || req.user!.userId : req.user!.userId;
+      const payload = isStaffCreator
+        ? req.body
+        : (() => {
+            const { medicalNotes: _m, allergies: _a, registrationNumber: _r, ...safeBody } = req.body;
+            return safeBody;
+          })();
+
+      const patient = await patientService.create(targetUserId, payload);
 
       await createAuditLog(req, {
         action: 'CREATE',

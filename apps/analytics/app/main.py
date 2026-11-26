@@ -3,7 +3,7 @@
 # =============================================================================
 
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import structlog
 from fastapi import Depends, FastAPI
@@ -12,8 +12,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.v1 import analytics, data_processing
 from app.config import settings
 from app.middleware.auth import verify_api_key
+from app.repositories.analytics_repo import AnalyticsRepository
 
 logger = structlog.get_logger()
+_health_repo = AnalyticsRepository()
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -22,11 +25,12 @@ async def lifespan(app: FastAPI):
     yield
     logger.info("MediCore Analytics Service shutting down")
 
+
 app = FastAPI(
     title="MediCore Analytics Service",
     description="""
     Clinical data processing and analytics service for MediCore Hospital Management Platform.
-    
+
     **Responsibilities:**
     - Appointment utilization analysis
     - Waiting-time calculations
@@ -34,7 +38,7 @@ app = FastAPI(
     - Synthetic patient population reports
     - Clinical dataset validation
     - Data quality reporting
-    
+
     **IMPORTANT:** This service does NOT generate medical diagnoses or treatment recommendations.
     It processes synthetic data only for educational purposes.
     """,
@@ -45,13 +49,15 @@ app = FastAPI(
 )
 
 # CORS
+cors_origins = [o.strip() for o in settings.CORS_ORIGIN.split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.CORS_ORIGIN],
+    allow_origins=cors_origins or ["http://localhost:3000"],
     allow_credentials=True,
     allow_methods=["GET", "POST"],
-    allow_headers=["*"],
+    allow_headers=["Authorization", "Content-Type", "X-API-Key", "X-Request-ID"],
 )
+
 
 # Health endpoints
 @app.get("/health", tags=["Health"])
@@ -60,17 +66,20 @@ async def health_check():
     return {
         "status": "healthy",
         "service": "medicore-analytics",
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "version": "1.0.0",
     }
 
+
 @app.get("/ready", tags=["Health"])
 async def readiness_check():
-    """Readiness check endpoint."""
+    """Readiness check reporting read-only DB connectivity vs synthetic fallback mode."""
+    db_connected = _health_repo.check_connection()
     return {
         "status": "ready",
         "service": "medicore-analytics",
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "database": "UP" if db_connected else "SYNTHETIC_FALLBACK",
+        "timestamp": datetime.now(UTC).isoformat(),
     }
 
 # API Routes

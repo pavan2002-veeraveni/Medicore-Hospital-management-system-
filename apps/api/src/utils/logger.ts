@@ -20,9 +20,28 @@ export const logger = pino({
     req: pino.stdSerializers.req,
     res: pino.stdSerializers.res,
   },
-  // Never log sensitive data
+  // Never log credentials, tokens, or restricted PHI/PII fields
   redact: {
-    paths: ['req.headers.authorization', 'req.headers.cookie', 'password', 'passwordHash', 'token', 'refreshToken'],
+    paths: [
+      'req.headers.authorization',
+      'req.headers.cookie',
+      'password',
+      'passwordHash',
+      'token',
+      'refreshToken',
+      'ssn',
+      'nationalId',
+      'medicalNotes',
+      'clinicalNotes',
+      'allergies',
+      '*.password',
+      '*.passwordHash',
+      '*.token',
+      '*.refreshToken',
+      '*.medicalNotes',
+      '*.clinicalNotes',
+      '*.allergies',
+    ],
     censor: '[REDACTED]',
   },
 });

@@ -8,7 +8,7 @@ const ToastContext = React.createContext<{ toast: (props: Omit<ToastProps, 'id'>
 
 export function useToast() { return React.useContext(ToastContext); }
 
-export function Toaster() {
+export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = React.useState<ToastProps[]>([]);
   const toast = React.useCallback((props: Omit<ToastProps, 'id'>) => {
     const id = Math.random().toString(36).slice(2);
@@ -18,6 +18,7 @@ export function Toaster() {
 
   return (
     <ToastContext.Provider value={{ toast }}>
+      {children}
       <div className="fixed bottom-4 right-4 z-[100] flex flex-col gap-2">
         {toasts.map(t => (
           <div key={t.id} className={`rounded-lg border p-4 shadow-lg animate-in slide-in-from-right ${t.variant === 'destructive' ? 'bg-red-50 border-red-200' : 'bg-white'}`}>
@@ -28,4 +29,8 @@ export function Toaster() {
       </div>
     </ToastContext.Provider>
   );
+}
+
+export function Toaster() {
+  return null;
 }

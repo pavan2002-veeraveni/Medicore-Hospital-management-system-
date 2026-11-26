@@ -75,7 +75,7 @@ router.get(
 router.get(
   '/doctors',
   authenticate,
-  authorize('HOSPITAL_ADMIN', 'RECEPTIONIST', 'PATIENT'),
+  authorize('HOSPITAL_ADMIN', 'RECEPTIONIST', 'PATIENT', 'DOCTOR', 'NURSE'),
   validate({ query: doctorQuerySchema }),
   staffController.getDoctors
 );

@@ -33,13 +33,12 @@ async def process_lab_data(data: LabDataInput):
     - Generate data quality report
     """
     try:
-        result = await processing_service.process_lab_data(data)
-        return result
+        return await processing_service.process_lab_data(data)
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except (RuntimeError, TypeError, LookupError) as e:
         logger.error("process_lab_data_error", error=str(e))
-        raise HTTPException(status_code=500, detail="Failed to process lab data")
+        raise HTTPException(status_code=500, detail="Failed to process lab data") from e
 
 
 @router.post(
@@ -57,13 +56,12 @@ async def process_appointment_data(data: AppointmentDataInput):
     - Generate data quality report
     """
     try:
-        result = await processing_service.process_appointment_data(data)
-        return result
+        return await processing_service.process_appointment_data(data)
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except (RuntimeError, TypeError, LookupError) as e:
         logger.error("process_appointment_data_error", error=str(e))
-        raise HTTPException(status_code=500, detail="Failed to process appointment data")
+        raise HTTPException(status_code=500, detail="Failed to process appointment data") from e
 
 
 @router.post(
@@ -77,8 +75,7 @@ async def data_quality_report(
 ):
     """Generate a comprehensive data quality report."""
     try:
-        result = await processing_service.generate_quality_report(dataset_type)
-        return result
-    except Exception as e:
+        return await processing_service.generate_quality_report(dataset_type)
+    except (RuntimeError, ValueError, TypeError, LookupError) as e:
         logger.error("data_quality_error", error=str(e))
-        raise HTTPException(status_code=500, detail="Failed to generate quality report")
+        raise HTTPException(status_code=500, detail="Failed to generate quality report") from e

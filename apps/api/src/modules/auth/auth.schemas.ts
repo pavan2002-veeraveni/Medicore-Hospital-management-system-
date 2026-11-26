@@ -18,9 +18,17 @@ export const registerSchema = z.object({
     .regex(/[a-z]/, 'Password must contain at least one lowercase letter')
     .regex(/[0-9]/, 'Password must contain at least one number')
     .regex(/[^A-Za-z0-9]/, 'Password must contain at least one special character'),
-  firstName: z.string().min(1, 'First name is required').max(100),
-  lastName: z.string().min(1, 'Last name is required').max(100),
-  phone: z.string().optional(),
+  firstName: z.string().trim().min(1, 'First name is required').max(100),
+  lastName: z.string().trim().min(1, 'Last name is required').max(100),
+  phone: z.preprocess(
+    (val) => (typeof val === 'string' && val.trim() === '' ? undefined : val),
+    z.string().trim().max(30).optional()
+  ),
+  dateOfBirth: z.coerce
+    .date()
+    .refine((date) => date <= new Date(), 'Date of birth cannot be in the future')
+    .optional(),
+  gender: z.enum(['MALE', 'FEMALE', 'OTHER', 'PREFER_NOT_TO_SAY']).optional(),
   role: z.enum(['PATIENT', 'RECEPTIONIST', 'DOCTOR', 'NURSE', 'LAB_TECHNICIAN', 'BILLING_OFFICER', 'HOSPITAL_ADMIN']).optional(),
 });
 

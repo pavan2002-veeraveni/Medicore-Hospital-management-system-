@@ -62,7 +62,7 @@ const router = Router();
 router.post(
   '/',
   authenticate,
-  authorize('RECEPTIONIST', 'HOSPITAL_ADMIN'),
+  authorize('RECEPTIONIST', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE', 'PATIENT'),
   validate({ body: createPatientSchema }),
   patientController.create
 );
@@ -104,7 +104,7 @@ router.post(
 router.get(
   '/',
   authenticate,
-  authorize('RECEPTIONIST', 'DOCTOR', 'NURSE', 'HOSPITAL_ADMIN'),
+  authorize('RECEPTIONIST', 'DOCTOR', 'NURSE', 'HOSPITAL_ADMIN', 'BILLING_OFFICER'),
   validate({ query: patientQuerySchema }),
   patientController.findAll
 );
@@ -166,7 +166,7 @@ router.get(
 router.get(
   '/:id',
   authenticate,
-  authorize('PATIENT', 'DOCTOR', 'NURSE', 'RECEPTIONIST'),
+  authorize('PATIENT', 'DOCTOR', 'NURSE', 'RECEPTIONIST', 'HOSPITAL_ADMIN', 'BILLING_OFFICER', 'LAB_TECHNICIAN'),
   validate({ params: patientIdParamSchema }),
   patientController.findById
 );
@@ -219,7 +219,7 @@ router.get(
 router.put(
   '/:id',
   authenticate,
-  authorize('PATIENT', 'HOSPITAL_ADMIN'),
+  authorize('PATIENT', 'HOSPITAL_ADMIN', 'RECEPTIONIST', 'DOCTOR', 'NURSE'),
   validate({ params: patientIdParamSchema, body: updatePatientSchema }),
   patientController.update
 );

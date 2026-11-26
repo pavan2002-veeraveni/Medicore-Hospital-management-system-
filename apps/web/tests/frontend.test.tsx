@@ -8,7 +8,13 @@ import { StatusBadge, EmptyState, ErrorState } from '@/components/ui/primitives'
 import { PatientDashboardView } from '@/components/features/PatientPortalViews';
 import { Calendar, Home } from 'lucide-react';
 import { medicoreService } from '@/services/medicore';
-import { buildAppointmentIdempotencyKey, getApiErrorMessage } from '@/lib/api';
+import {
+  buildAppointmentIdempotencyKey,
+  buildVitalSignsPayload,
+  getApiErrorMessage,
+  roundCurrency,
+} from '@/lib/api';
+import { ToastProvider, useToast } from '@/components/ui/toaster';
 
 function renderWithQuery(ui: React.ReactElement) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -141,5 +147,25 @@ describe('MediCore Frontend Component & Role Tests', () => {
     );
     expect(formatted).toBe('Request validation failed: Invalid slot, Reason cannot be empty');
     expect(getApiErrorMessage({}, 'Booking failed')).toBe('Booking failed');
+
+    expect(roundCurrency(35.1 - 10.2)).toBe(24.9);
+    expect(
+      buildVitalSignsPayload({ temperature: '37.2', bpSystolic: '', weight: '72', notes: '  Stable  ' })
+    ).toEqual({ temperature: 37.2, weight: 72, notes: 'Stable' });
+  });
+
+  it('provides working ToastContext through ToastProvider', () => {
+    function Trigger() {
+      const { toast } = useToast();
+      return <button onClick={() => toast({ title: 'Saved', description: 'Vitals updated' })}>Fire Toast</button>;
+    }
+    render(
+      <ToastProvider>
+        <Trigger />
+      </ToastProvider>
+    );
+    fireEvent.click(screen.getByText('Fire Toast'));
+    expect(screen.getByText('Saved')).toBeInTheDocument();
+    expect(screen.getByText('Vitals updated')).toBeInTheDocument();
   });
 });

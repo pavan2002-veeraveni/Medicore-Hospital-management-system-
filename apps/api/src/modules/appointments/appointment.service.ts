@@ -55,16 +55,12 @@ const BLOCKING_STATUSES: AppointmentStatus[] = [
 ];
 
 const STAFF_ROLES = new Set([
-  'ADMIN',
-  'SUPER_ADMIN',
   'HOSPITAL_ADMIN',
   'DOCTOR',
   'NURSE',
   'RECEPTIONIST',
   'LAB_TECHNICIAN',
-  'PHARMACIST',
   'BILLING_OFFICER',
-  'BILLING_STAFF',
 ]);
 
 const APPOINTMENT_INCLUDE = {

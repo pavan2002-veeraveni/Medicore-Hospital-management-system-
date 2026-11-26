@@ -49,7 +49,7 @@ router.use(authenticate);
  */
 router.post(
   '/',
-  authorize('PATIENT', 'RECEPTIONIST'),
+  authorize('PATIENT', 'RECEPTIONIST', 'DOCTOR', 'HOSPITAL_ADMIN'),
   validate({ body: createAppointmentSchema }),
   appointmentController.create
 );
@@ -91,7 +91,7 @@ router.get(
  */
 router.get(
   '/available-slots',
-  authorize('PATIENT', 'RECEPTIONIST'),
+  authorize('PATIENT', 'RECEPTIONIST', 'DOCTOR', 'NURSE', 'HOSPITAL_ADMIN'),
   validate({ query: availableSlotsQuerySchema }),
   appointmentController.getAvailableSlots
 );

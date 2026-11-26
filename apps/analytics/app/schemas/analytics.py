@@ -2,13 +2,13 @@
 # MediCore Analytics - Pydantic Schemas for Analytics
 # =============================================================================
 
+from datetime import UTC, datetime
+
 from pydantic import BaseModel, Field
-from typing import Optional, List, Dict, Any
-from datetime import datetime, date, timezone
 
 
 def utc_now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 class UtilizationMetric(BaseModel):
@@ -25,13 +25,13 @@ class UtilizationMetric(BaseModel):
 
 class AppointmentUtilizationResponse(BaseModel):
     """Appointment utilization analysis response."""
-    period: Dict[str, Optional[str]]
+    period: dict[str, str | None]
     overall_utilization: float
     overall_completion_rate: float
     total_appointments: int
-    by_department: List[UtilizationMetric] = []
-    by_day_of_week: List[UtilizationMetric] = []
-    by_type: List[UtilizationMetric] = []
+    by_department: list[UtilizationMetric] = []
+    by_day_of_week: list[UtilizationMetric] = []
+    by_type: list[UtilizationMetric] = []
     data_source: str = "synthetic"
     generated_at: datetime = Field(default_factory=utc_now)
 
@@ -49,12 +49,12 @@ class WaitingTimeMetric(BaseModel):
 
 class WaitingTimeResponse(BaseModel):
     """Waiting time analysis response."""
-    period: Dict[str, Optional[str]]
+    period: dict[str, str | None]
     overall_avg_minutes: float
     overall_median_minutes: float
-    by_department: List[WaitingTimeMetric] = []
-    by_day_of_week: List[WaitingTimeMetric] = []
-    by_hour: List[WaitingTimeMetric] = []
+    by_department: list[WaitingTimeMetric] = []
+    by_day_of_week: list[WaitingTimeMetric] = []
+    by_hour: list[WaitingTimeMetric] = []
     data_source: str = "synthetic"
     generated_at: datetime = Field(default_factory=utc_now)
 
@@ -68,17 +68,17 @@ class LabTurnaroundMetric(BaseModel):
     max_hours: float
     within_target: int
     total: int
-    target_hours: Optional[float] = None
+    target_hours: float | None = None
     compliance_rate: float = Field(ge=0, le=100)
 
 
 class LabTurnaroundResponse(BaseModel):
     """Lab turnaround analysis response."""
-    period: Dict[str, Optional[str]]
+    period: dict[str, str | None]
     overall_avg_hours: float
     overall_compliance_rate: float
-    by_category: List[LabTurnaroundMetric] = []
-    by_priority: List[LabTurnaroundMetric] = []
+    by_category: list[LabTurnaroundMetric] = []
+    by_priority: list[LabTurnaroundMetric] = []
     abnormal_rate: float
     data_source: str = "synthetic"
     generated_at: datetime = Field(default_factory=utc_now)
@@ -96,9 +96,9 @@ class PatientPopulationResponse(BaseModel):
     total_patients: int
     active_patients: int
     new_registrations_30d: int
-    by_gender: List[DemographicBreakdown] = []
-    by_age_group: List[DemographicBreakdown] = []
-    by_blood_type: List[DemographicBreakdown] = []
+    by_gender: list[DemographicBreakdown] = []
+    by_age_group: list[DemographicBreakdown] = []
+    by_blood_type: list[DemographicBreakdown] = []
     avg_age: float
     data_source: str = "synthetic"
     generated_at: datetime = Field(default_factory=utc_now)

@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { useAuditLogs, useDepartments, usePatients, useUsers } from '@/hooks/useMedicore';
 import { medicoreService } from '@/services/medicore';
+import { getApiErrorMessage } from '@/lib/api';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Breadcrumbs,
@@ -38,7 +39,7 @@ export function PatientsDirectoryView({ allowRegister = false }: { allowRegister
       qc.invalidateQueries({ queryKey: ['patients'] });
       setUserId('');
     } catch (err: any) {
-      setErrMsg(err?.response?.data?.message || 'Registration failed');
+      setErrMsg(getApiErrorMessage(err, 'Registration failed'));
     }
   };
 
@@ -50,12 +51,22 @@ export function PatientsDirectoryView({ allowRegister = false }: { allowRegister
           <CardHeader><CardTitle>Register Patient Profile</CardTitle></CardHeader>
           <CardContent>
             {errMsg && <div className="mb-3"><ErrorState message={errMsg} /></div>}
-            <form onSubmit={handleRegister} className="grid gap-3 sm:grid-cols-4 items-end">
+            <form onSubmit={handleRegister} className="grid gap-3 sm:grid-cols-5 items-end">
               <div><label className="text-xs text-gray-600">User UUID</label><input value={userId} onChange={(e) => setUserId(e.target.value)} required placeholder="User UUID" className="w-full rounded-lg border px-3 py-2 text-sm" /></div>
               <div><label className="text-xs text-gray-600">Date of Birth</label><input type="date" value={dob} onChange={(e) => setDob(e.target.value)} required className="w-full rounded-lg border px-3 py-2 text-sm" /></div>
               <div><label className="text-xs text-gray-600">Gender</label>
                 <select value={gender} onChange={(e) => setGender(e.target.value)} className="w-full rounded-lg border px-3 py-2 text-sm">
-                  <option value="FEMALE">Female</option><option value="MALE">Male</option><option value="OTHER">Other</option>
+                  <option value="FEMALE">Female</option>
+                  <option value="MALE">Male</option>
+                  <option value="OTHER">Other</option>
+                  <option value="PREFER_NOT_TO_SAY">Prefer not to say</option>
+                </select>
+              </div>
+              <div><label className="text-xs text-gray-600">Blood Type</label>
+                <select value={bloodType} onChange={(e) => setBloodType(e.target.value)} className="w-full rounded-lg border px-3 py-2 text-sm">
+                  {['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'].map((bt) => (
+                    <option key={bt} value={bt}>{bt}</option>
+                  ))}
                 </select>
               </div>
               <Button type="submit">Register Patient</Button>
@@ -94,11 +105,31 @@ export function PatientsDirectoryView({ allowRegister = false }: { allowRegister
 export function AdminUsersView() {
   const qc = useQueryClient();
   const { data, isLoading, error, refetch } = useUsers({ limit: 50 });
+  const [actionErr, setActionErr] = useState('');
+  const [currentUserId] = useState(() => {
+    try {
+      return typeof window !== 'undefined' ? (JSON.parse(localStorage.getItem('user') || '{}').id || '') : '';
+    } catch {
+      return '';
+    }
+  });
   const users = data?.data || [];
+
+  const handleDeactivate = async (id: string) => {
+    setActionErr('');
+    try {
+      await medicoreService.deactivateUser(id);
+      qc.invalidateQueries({ queryKey: ['users'] });
+    } catch (err: any) {
+      setActionErr(getApiErrorMessage(err, 'Failed to deactivate user'));
+    }
+  };
+
   return (
     <div className="space-y-6">
       <Breadcrumbs items={[{ label: 'Dashboard', href: '/admin/dashboard' }, { label: 'Users' }]} />
       <h1 className="text-2xl font-bold text-gray-900">User Management</h1>
+      {actionErr && <ErrorState message={actionErr} />}
       <Card>
         <CardContent>
           {isLoading ? <LoadingSkeleton /> : error ? <ErrorState onRetry={() => refetch()} /> : users.length === 0 ? <EmptyState /> : (
@@ -112,8 +143,8 @@ export function AdminUsersView() {
                     <td className="py-3">{(u.roles || []).join(', ')}</td>
                     <td className="py-3"><StatusBadge status={u.isActive ? 'ACTIVE' : 'CANCELLED'} /></td>
                     <td className="py-3 text-right">
-                      {u.isActive && (
-                        <Button size="sm" variant="outline" onClick={() => medicoreService.deactivateUser(u.id).then(() => qc.invalidateQueries({ queryKey: ['users'] }))}>
+                      {u.isActive && u.id !== currentUserId && (
+                        <Button size="sm" variant="outline" onClick={() => handleDeactivate(u.id)}>
                           Deactivate
                         </Button>
                       )}
@@ -131,23 +162,30 @@ export function AdminUsersView() {
 
 export function AdminDepartmentsView() {
   const qc = useQueryClient();
-  const { data, isLoading } = useDepartments();
+  const { data, isLoading, error, refetch } = useDepartments();
   const [name, setName] = useState('');
   const [code, setCode] = useState('');
+  const [errMsg, setErrMsg] = useState('');
   const depts = data?.data || [];
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    await medicoreService.createDepartment({ name, code });
-    setName('');
-    setCode('');
-    qc.invalidateQueries({ queryKey: ['departments'] });
+    setErrMsg('');
+    try {
+      await medicoreService.createDepartment({ name, code });
+      setName('');
+      setCode('');
+      qc.invalidateQueries({ queryKey: ['departments'] });
+    } catch (err: any) {
+      setErrMsg(getApiErrorMessage(err, 'Failed to create department'));
+    }
   };
 
   return (
     <div className="space-y-6">
       <Breadcrumbs items={[{ label: 'Dashboard', href: '/admin/dashboard' }, { label: 'Departments' }]} />
       <h1 className="text-2xl font-bold text-gray-900">Departments</h1>
+      {errMsg && <ErrorState message={errMsg} />}
       <Card>
         <CardHeader><CardTitle>Add Department</CardTitle></CardHeader>
         <CardContent>
@@ -160,7 +198,7 @@ export function AdminDepartmentsView() {
       </Card>
       <Card>
         <CardContent>
-          {isLoading ? <LoadingSkeleton /> : (
+          {isLoading ? <LoadingSkeleton /> : error ? <ErrorState onRetry={() => refetch()} /> : (
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {depts.map((d: any) => (
                 <div key={d.id} className="rounded-lg border p-4">
@@ -190,14 +228,32 @@ export function AdminAuditLogsView() {
         <h1 className="text-2xl font-bold text-gray-900">Immutable Audit Logs</h1>
         <select value={resourceType} onChange={(e) => setResourceType(e.target.value)} className="rounded-lg border px-3 py-2 text-sm">
           <option value="">All Resources</option>
-          <option value="AUTH">Auth</option>
-          <option value="PATIENT">Patient</option>
-          <option value="APPOINTMENT">Appointment</option>
-          <option value="ENCOUNTER">Encounter</option>
-          <option value="PRESCRIPTION">Prescription</option>
-          <option value="LAB_ORDER">Lab Order</option>
-          <option value="INVOICE">Invoice</option>
-          <option value="CONSENT">Consent</option>
+          {[
+            'AUTH',
+            'PATIENT',
+            'APPOINTMENT',
+            'ENCOUNTER',
+            'DIAGNOSIS',
+            'VITAL_SIGN',
+            'PRESCRIPTION',
+            'LAB_TEST',
+            'LAB_ORDER',
+            'LAB_ORDER_ITEM',
+            'LAB_RESULT',
+            'INVOICE',
+            'PAYMENT',
+            'CONSENT',
+            'USER',
+            'STAFF',
+            'DEPARTMENT',
+            'ANALYTICS',
+            'FHIR_PATIENT',
+            'FHIR_APPOINTMENT',
+            'FHIR_ENCOUNTER',
+            'FHIR_OBSERVATION',
+          ].map((res) => (
+            <option key={res} value={res}>{res.replace(/_/g, ' ')}</option>
+          ))}
         </select>
       </div>
       <Card>

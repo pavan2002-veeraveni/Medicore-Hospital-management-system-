@@ -2,14 +2,16 @@
 # MediCore Analytics - Pytest Tests
 # =============================================================================
 
-import pytest
-from httpx import AsyncClient, ASGITransport
-from app.config import settings
-from app.main import app
-from datetime import datetime, timedelta, timezone
 import json
 import time
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
+
+import pytest
+from httpx import ASGITransport, AsyncClient
+
+from app.config import settings
+from app.main import app
 
 
 @pytest.fixture
@@ -208,7 +210,7 @@ async def test_process_lab_data_invalid(test_headers):
 @pytest.mark.asyncio
 async def test_process_appointment_data_valid(test_headers):
     """Test appointment data processing with valid data."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.post(
@@ -239,7 +241,7 @@ async def test_process_appointment_data_valid(test_headers):
 @pytest.mark.asyncio
 async def test_process_appointment_data_conflict(test_headers):
     """Test appointment data processing detects scheduling conflicts."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.post(
@@ -343,3 +345,59 @@ async def test_process_lab_data_empty(test_headers):
             json={"records": []},
         )
     assert response.status_code == 422  # Validation error - min_length=1
+
+
+@pytest.mark.asyncio
+async def test_analytics_service_uses_db_views_when_available():
+    """Verify AnalyticsService aggregates real DB views when repository returns rows."""
+    from app.services.analytics_service import AnalyticsService
+
+    class MockRepo:
+        def fetch_appointment_utilization(self, **_kwargs):
+            return [
+                {
+                    "department_name": "Cardiology",
+                    "appointment_date": "2026-11-26",
+                    "type": "CONSULTATION",
+                    "status": "COMPLETED",
+                    "appointment_count": 3,
+                    "avg_duration_minutes": 30.0,
+                },
+                {
+                    "department_name": "Cardiology",
+                    "appointment_date": "2026-11-26",
+                    "type": "FOLLOW_UP",
+                    "status": "CANCELLED",
+                    "appointment_count": 1,
+                    "avg_duration_minutes": 15.0,
+                },
+            ]
+
+        def fetch_waiting_times(self, **_kwargs):
+            return [
+                {"department_name": "Cardiology", "checked_in_at": "2026-11-26T09:00:00Z", "wait_minutes": 10.0},
+                {"department_name": "Cardiology", "checked_in_at": "2026-11-26T10:00:00Z", "wait_minutes": 20.0},
+            ]
+
+        def fetch_lab_turnaround(self, **_kwargs):
+            return [
+                {"category": "Hematology", "priority": "ROUTINE", "target_hours": 4.0, "is_abnormal": False, "actual_hours": 2.0},
+                {"category": "Hematology", "priority": "STAT", "target_hours": 1.0, "is_abnormal": True, "actual_hours": 1.5},
+            ]
+
+    service = AnalyticsService(repository=MockRepo())  # type: ignore[arg-type]
+    util = await service.get_appointment_utilization()
+    assert util.data_source == "database"
+    assert util.total_appointments == 4
+    assert len(util.by_type) == 2
+    assert len(util.by_day_of_week) == 1
+
+    waits = await service.get_waiting_times()
+    assert waits.data_source == "database"
+    assert waits.overall_avg_minutes == 15.0
+    assert len(waits.by_hour) == 2
+
+    lab = await service.get_lab_turnaround()
+    assert lab.data_source == "database"
+    assert lab.overall_compliance_rate == 50.0
+    assert lab.abnormal_rate == 50.0

@@ -35,13 +35,32 @@ import {
 } from '@/components/ui/primitives';
 
 export function PatientDashboardView() {
+  const qc = useQueryClient();
   const { data: profile } = useProfile();
-  const { data: patient } = useMyPatient();
+  const { data: patient, isLoading: loadingPatient } = useMyPatient();
   const { data: apptsRes, isLoading: loadingAppts, error: apptsErr, refetch: refetchAppts } = useAppointments({ limit: 10 });
   const { data: rxRes } = usePrescriptions({ limit: 5 });
   const { data: labRes } = useLabResults({ limit: 5 });
   const { data: invRes } = useInvoices({ limit: 5 });
   const [bookingOpen, setBookingOpen] = useState(false);
+  const [onboardDob, setOnboardDob] = useState('1995-01-01');
+  const [onboardGender, setOnboardGender] = useState('PREFER_NOT_TO_SAY');
+  const [onboardErr, setOnboardErr] = useState('');
+  const [onboarding, setOnboarding] = useState(false);
+
+  const handleCompleteProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setOnboardErr('');
+    setOnboarding(true);
+    try {
+      await medicoreService.createPatient({ dateOfBirth: onboardDob, gender: onboardGender });
+      qc.invalidateQueries({ queryKey: ['patient', 'me'] });
+    } catch (err: any) {
+      setOnboardErr(getApiErrorMessage(err, 'Failed to create patient profile'));
+    } finally {
+      setOnboarding(false);
+    }
+  };
 
   const appointments = apptsRes?.data || [];
   const prescriptions = rxRes?.data || [];
@@ -53,6 +72,31 @@ export function PatientDashboardView() {
 
   return (
     <div className="space-y-8">
+      {!loadingPatient && !patient && (
+        <Card className="border-amber-200 bg-amber-50/40">
+          <CardHeader><CardTitle>Complete Your Patient Profile</CardTitle></CardHeader>
+          <CardContent>
+            <p className="text-sm text-gray-600 mb-3">Finish setting up your Medical Record Number before booking appointments or managing consent.</p>
+            {onboardErr && <div className="mb-3"><ErrorState message={onboardErr} /></div>}
+            <form onSubmit={handleCompleteProfile} className="flex flex-wrap gap-3 items-end">
+              <div>
+                <label className="block text-xs text-gray-600 mb-1">Date of Birth</label>
+                <input type="date" value={onboardDob} onChange={(e) => setOnboardDob(e.target.value)} required className="rounded-lg border px-3 py-2 text-sm bg-white" />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-600 mb-1">Gender</label>
+                <select value={onboardGender} onChange={(e) => setOnboardGender(e.target.value)} className="rounded-lg border px-3 py-2 text-sm bg-white">
+                  <option value="FEMALE">Female</option>
+                  <option value="MALE">Male</option>
+                  <option value="OTHER">Other</option>
+                  <option value="PREFER_NOT_TO_SAY">Prefer not to say</option>
+                </select>
+              </div>
+              <Button type="submit" loading={onboarding}>Activate Patient Profile</Button>
+            </form>
+          </CardContent>
+        </Card>
+      )}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">
@@ -268,11 +312,17 @@ export function PatientAppointmentsView() {
   const { data, isLoading, error, refetch } = useAppointments({ limit: 50 });
   const actionMutation = useAppointmentAction();
   const [bookingOpen, setBookingOpen] = useState(false);
+  const [actionErr, setActionErr] = useState('');
 
   const appointments = data?.data || [];
 
   const handleCancel = async (id: string) => {
-    await actionMutation.mutateAsync({ id, action: 'cancel', body: { reason: 'Cancelled by patient' } });
+    setActionErr('');
+    try {
+      await actionMutation.mutateAsync({ id, action: 'cancel', body: { reason: 'Cancelled by patient' } });
+    } catch (err: any) {
+      setActionErr(getApiErrorMessage(err, 'Failed to cancel appointment'));
+    }
   };
 
   return (
@@ -284,6 +334,7 @@ export function PatientAppointmentsView() {
           <Plus className="h-4 w-4" /> Book Appointment
         </Button>
       </div>
+      {actionErr && <ErrorState message={actionErr} />}
       <Card>
         <CardContent>
           {isLoading ? (
@@ -334,26 +385,45 @@ export function PatientAppointmentsView() {
 }
 
 export function PatientRecordsAndConsentsView() {
-  const { data: patient } = useMyPatient();
-  const { data: consentsRes, isLoading, refetch } = useConsents({ limit: 20 });
+  const { data: patient, isLoading: loadingPatient } = useMyPatient();
+  const { data: consentsRes, isLoading, error: consentsErr, refetch } = useConsents({ limit: 20 });
   const qc = useQueryClient();
   const [category, setCategory] = useState('DATA_SHARING');
   const [purpose, setPurpose] = useState('FHIR interoperability exchange');
+  const [msg, setMsg] = useState('');
+  const [errMsg, setErrMsg] = useState('');
 
   const consents = consentsRes?.data || [];
 
   const handleGrant = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!patient?.id) return;
-    await medicoreService.grantConsent({ patientId: patient.id, category, purpose });
-    qc.invalidateQueries({ queryKey: ['consents'] });
-    refetch();
+    setMsg('');
+    setErrMsg('');
+    if (!patient?.id) {
+      setErrMsg('Please complete your patient profile on the Dashboard first');
+      return;
+    }
+    try {
+      await medicoreService.grantConsent({ patientId: patient.id, category, purpose });
+      setMsg('Consent preference updated');
+      qc.invalidateQueries({ queryKey: ['consents'] });
+      refetch();
+    } catch (err: any) {
+      setErrMsg(getApiErrorMessage(err, 'Failed to grant consent'));
+    }
   };
 
   const handleRevoke = async (id: string) => {
-    await medicoreService.revokeConsent(id, 'Revoked via patient portal');
-    qc.invalidateQueries({ queryKey: ['consents'] });
-    refetch();
+    setMsg('');
+    setErrMsg('');
+    try {
+      await medicoreService.revokeConsent(id, 'Revoked via patient portal');
+      setMsg('Consent revoked');
+      qc.invalidateQueries({ queryKey: ['consents'] });
+      refetch();
+    } catch (err: any) {
+      setErrMsg(getApiErrorMessage(err, 'Failed to revoke consent'));
+    }
   };
 
   return (
@@ -361,7 +431,16 @@ export function PatientRecordsAndConsentsView() {
       <Breadcrumbs items={[{ label: 'Dashboard', href: '/patient/dashboard' }, { label: 'Records & Consent' }]} />
       <h1 className="text-2xl font-bold text-gray-900">Medical Records & Consent Preferences</h1>
 
-      {patient && (
+      {msg && <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-3 text-sm text-emerald-800">{msg}</div>}
+      {errMsg && <ErrorState message={errMsg} />}
+
+      {!loadingPatient && !patient ? (
+        <Card>
+          <CardContent className="pt-6 text-sm text-amber-800 bg-amber-50/50 rounded-lg">
+            Complete your Patient Profile from the Patient Dashboard to unlock medical summary and consent controls.
+          </CardContent>
+        </Card>
+      ) : patient && (
         <Card>
           <CardHeader><CardTitle>Clinical Summary</CardTitle></CardHeader>
           <CardContent className="grid gap-4 sm:grid-cols-3 text-sm">
@@ -394,11 +473,13 @@ export function PatientRecordsAndConsentsView() {
               <label className="block text-xs font-medium text-gray-700 mb-1">Purpose</label>
               <input value={purpose} onChange={(e) => setPurpose(e.target.value)} required className="w-full rounded-lg border px-3 py-2 text-sm" />
             </div>
-            <Button type="submit">Grant Consent</Button>
+            <Button type="submit" disabled={!patient?.id}>Grant Consent</Button>
           </form>
 
           {isLoading ? (
             <LoadingSkeleton rows={2} />
+          ) : consentsErr ? (
+            <ErrorState onRetry={() => refetch()} />
           ) : consents.length === 0 ? (
             <EmptyState title="No consent records" />
           ) : (

@@ -157,7 +157,7 @@ jobs:
 
       - name: Lint with ruff
         working-directory: apps/analytics
-        run: ruff check . || true
+        run: ruff check .
 
       - name: Type check with mypy
         working-directory: apps/analytics

@@ -50,7 +50,6 @@ const CLINICAL_AND_ADMIN_ROLES = [
   'DOCTOR',
   'NURSE',
   'HOSPITAL_ADMIN',
-  'ADMIN',
 ];
 
 const LAB_ORDER_INCLUDE = {
@@ -752,32 +751,53 @@ export class LaboratoryService {
       throw new ConflictError('Lab result has already been validated');
     }
 
-    const validatedResult = await prisma.labResult.update({
-      where: { id: resultId },
-      data: {
-        validatedBy,
-        validatedAt: new Date(),
-      },
-      include: {
-        labOrderItem: {
-          include: {
-            test: true,
-            labOrder: {
-              select: {
-                id: true,
-                patientId: true,
-                status: true,
-                patient: {
-                  select: {
-                    userId: true,
-                    user: { select: { email: true } },
+    const validatedResult = await prisma.$transaction(async (tx) => {
+      const updatedResult = await tx.labResult.update({
+        where: { id: resultId },
+        data: {
+          validatedBy,
+          validatedAt: new Date(),
+        },
+        include: {
+          labOrderItem: {
+            include: {
+              test: true,
+              labOrder: {
+                select: {
+                  id: true,
+                  patientId: true,
+                  status: true,
+                  patient: {
+                    select: {
+                      userId: true,
+                      user: { select: { email: true } },
+                    },
                   },
                 },
               },
             },
           },
         },
-      },
+      });
+
+      const siblings = await tx.labOrderItem.findMany({
+        where: { labOrderId: updatedResult.labOrderItem.labOrderId },
+        include: { result: { select: { id: true, validatedAt: true } } },
+      });
+
+      const activeItems = siblings.filter((item: any) => item.status !== 'CANCELLED');
+      if (
+        activeItems.length > 0 &&
+        activeItems.every((item: any) => item.id === updatedResult.labOrderItemId || item.result?.validatedAt)
+      ) {
+        await tx.labOrder.update({
+          where: { id: updatedResult.labOrderItem.labOrderId },
+          data: { status: 'COMPLETED' },
+        });
+        updatedResult.labOrderItem.labOrder.status = 'COMPLETED';
+      }
+
+      return updatedResult;
     });
 
     logger.info(

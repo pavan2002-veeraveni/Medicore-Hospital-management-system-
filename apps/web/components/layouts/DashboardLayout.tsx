@@ -35,24 +35,27 @@ export default function DashboardLayout({
   useEffect(() => {
     const stored = localStorage.getItem('user');
     if (!stored) {
+      qc.clear();
       router.push('/login');
       return;
     }
     try {
       const parsed = JSON.parse(stored);
       if (!Array.isArray(parsed.roles) || !parsed.roles.includes(role)) {
+        qc.clear();
         router.push('/login');
         return;
       }
       setUser((prev) => (prev?.id === parsed.id ? prev : parsed));
     } catch {
+      qc.clear();
       router.push('/login');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [role]);
 
-  const { data: unreadData } = useUnreadNotificationCount();
-  const { data: notifList } = useNotifications();
+  const { data: unreadData } = useUnreadNotificationCount(Boolean(user));
+  const { data: notifList } = useNotifications(Boolean(user));
   const unreadCount = unreadData?.unreadCount ?? 0;
 
   const handleLogout = async () => {
@@ -71,6 +74,7 @@ export default function DashboardLayout({
     } catch {
       // Ignore network errors during logout
     }
+    qc.clear();
     localStorage.removeItem('accessToken');
     localStorage.removeItem('refreshToken');
     localStorage.removeItem('user');
@@ -78,8 +82,22 @@ export default function DashboardLayout({
   };
 
   const handleMarkAllRead = async () => {
-    await medicoreService.markAllNotificationsRead();
-    qc.invalidateQueries({ queryKey: ['notifications'] });
+    try {
+      await medicoreService.markAllNotificationsRead();
+      qc.invalidateQueries({ queryKey: ['notifications'] });
+    } catch {
+      // Ignore transient failure
+    }
+  };
+
+  const handleMarkRead = async (id: string, isRead: boolean) => {
+    if (isRead) return;
+    try {
+      await medicoreService.markNotificationRead(id);
+      qc.invalidateQueries({ queryKey: ['notifications'] });
+    } catch {
+      // Ignore transient failure
+    }
   };
 
   if (!user) {
@@ -196,7 +214,11 @@ export default function DashboardLayout({
                     <p className="p-4 text-xs text-gray-500 text-center">No notifications</p>
                   ) : (
                     (notifList?.data || []).map((n: any) => (
-                      <div key={n.id} className={`p-3 text-xs ${n.isRead ? 'bg-white' : 'bg-sky-50/50'}`}>
+                      <div
+                        key={n.id}
+                        onClick={() => handleMarkRead(n.id, Boolean(n.isRead))}
+                        className={`p-3 text-xs transition-colors ${n.isRead ? 'bg-white' : 'bg-sky-50/50 cursor-pointer hover:bg-sky-100/60'}`}
+                      >
                         <p className="font-medium text-gray-900">{n.title}</p>
                         <p className="text-gray-600 mt-0.5">{n.message}</p>
                       </div>

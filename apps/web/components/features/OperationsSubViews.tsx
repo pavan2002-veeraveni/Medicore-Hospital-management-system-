@@ -12,9 +12,10 @@ import {
   useLabResults,
   useLabTests,
   usePatients,
+  usePayments,
 } from '@/hooks/useMedicore';
 import { medicoreService } from '@/services/medicore';
-import { buildAppointmentIdempotencyKey, getApiErrorMessage } from '@/lib/api';
+import { buildAppointmentIdempotencyKey, getApiErrorMessage, roundCurrency } from '@/lib/api';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   Breadcrumbs,
@@ -80,6 +81,16 @@ export function ReceptionistAppointmentsView() {
     }
   };
 
+  const handleApptAction = async (id: string, action: string, body?: any) => {
+    setFeedback('');
+    setErrMsg('');
+    try {
+      await actionMutation.mutateAsync({ id, action, body });
+    } catch (err: any) {
+      setErrMsg(getApiErrorMessage(err, 'Appointment update failed'));
+    }
+  };
+
   return (
     <div className="space-y-6">
       <Breadcrumbs items={[{ label: 'Dashboard', href: '/receptionist/dashboard' }, { label: 'Appointments' }]} />
@@ -133,10 +144,10 @@ export function ReceptionistAppointmentsView() {
                     </div>
                     <div className="flex items-center gap-2">
                       <StatusBadge status={a.status} />
-                      {a.status === 'REQUESTED' && <Button size="sm" onClick={() => actionMutation.mutate({ id: a.id, action: 'confirm' })}>Confirm</Button>}
-                      {a.status === 'CONFIRMED' && <Button size="sm" variant="secondary" onClick={() => actionMutation.mutate({ id: a.id, action: 'check-in' })}>Check In</Button>}
+                      {a.status === 'REQUESTED' && <Button size="sm" onClick={() => handleApptAction(a.id, 'confirm')}>Confirm</Button>}
+                      {a.status === 'CONFIRMED' && <Button size="sm" variant="secondary" onClick={() => handleApptAction(a.id, 'check-in')}>Check In</Button>}
                       {['REQUESTED', 'CONFIRMED'].includes(a.status) && (
-                        <Button size="sm" variant="outline" onClick={() => actionMutation.mutate({ id: a.id, action: 'cancel', body: { reason: 'Front desk cancelled' } })}>Cancel</Button>
+                        <Button size="sm" variant="outline" onClick={() => handleApptAction(a.id, 'cancel', { reason: 'Front desk cancelled' })}>Cancel</Button>
                       )}
                     </div>
                   </div>
@@ -153,7 +164,17 @@ export function ReceptionistAppointmentsView() {
 export function ReceptionistQueueView({ mode }: { mode: 'check-in' | 'waiting' }) {
   const { data: apptsRes, isLoading, error, refetch } = useAppointments({ limit: 50 });
   const actionMutation = useAppointmentAction();
+  const [queueErr, setQueueErr] = useState('');
   const all = apptsRes?.data || [];
+
+  const handleQueueAction = async (id: string, action: string) => {
+    setQueueErr('');
+    try {
+      await actionMutation.mutateAsync({ id, action });
+    } catch (err: any) {
+      setQueueErr(getApiErrorMessage(err, 'Action failed'));
+    }
+  };
 
   const filtered =
     mode === 'check-in'
@@ -176,6 +197,8 @@ export function ReceptionistQueueView({ mode }: { mode: 'check-in' | 'waiting' }
         <Button size="sm" variant="outline" onClick={() => refetch()}>Refresh</Button>
       </div>
 
+      {queueErr && <ErrorState message={queueErr} />}
+
       <Card>
         <CardContent>
           {isLoading ? <LoadingSkeleton /> : error ? <ErrorState onRetry={() => refetch()} /> : filtered.length === 0 ? (
@@ -194,12 +217,12 @@ export function ReceptionistQueueView({ mode }: { mode: 'check-in' | 'waiting' }
                   <div className="flex items-center gap-2">
                     <StatusBadge status={a.status} />
                     {mode === 'check-in' && a.status === 'REQUESTED' && (
-                      <Button size="sm" onClick={() => actionMutation.mutate({ id: a.id, action: 'confirm' })}>Confirm</Button>
+                      <Button size="sm" onClick={() => handleQueueAction(a.id, 'confirm')}>Confirm</Button>
                     )}
                     {mode === 'check-in' && a.status === 'CONFIRMED' && (
                       <>
-                        <Button size="sm" variant="secondary" onClick={() => actionMutation.mutate({ id: a.id, action: 'check-in' })}>Check In</Button>
-                        <Button size="sm" variant="outline" onClick={() => actionMutation.mutate({ id: a.id, action: 'no-show' })}>No Show</Button>
+                        <Button size="sm" variant="secondary" onClick={() => handleQueueAction(a.id, 'check-in')}>Check In</Button>
+                        <Button size="sm" variant="outline" onClick={() => handleQueueAction(a.id, 'no-show')}>No Show</Button>
                       </>
                     )}
                   </div>
@@ -223,38 +246,57 @@ export function LaboratorySubView({ mode }: { mode: 'orders' | 'specimens' | 're
   const [val, setVal] = useState('');
   const [numVal, setNumVal] = useState('');
   const [msg, setMsg] = useState('');
+  const [labErr, setLabErr] = useState('');
 
   const orders = ordersRes?.data || [];
   const results = resultsRes?.data || [];
   const tests = testsRes?.data || [];
 
   const handleCollect = async (orderId: string) => {
-    await medicoreService.collectSpecimens(orderId);
-    setMsg('Specimen collected');
-    qc.invalidateQueries({ queryKey: ['lab-orders'] });
+    setMsg('');
+    setLabErr('');
+    try {
+      await medicoreService.collectSpecimens(orderId);
+      setMsg('Specimen collected');
+      qc.invalidateQueries({ queryKey: ['lab-orders'] });
+    } catch (err: any) {
+      setLabErr(getApiErrorMessage(err, 'Failed to collect specimen'));
+    }
   };
 
   const handleRecordResult = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!activeItem) return;
-    await medicoreService.recordLabResult(activeItem.orderId, {
-      labOrderItemId: activeItem.itemId,
-      value: val,
-      numericValue: numVal ? Number(numVal) : undefined,
-    });
-    setActiveItem(null);
-    setVal('');
-    setNumVal('');
-    setMsg('Result entered cleanly');
-    qc.invalidateQueries({ queryKey: ['lab-orders'] });
-    qc.invalidateQueries({ queryKey: ['lab-results'] });
+    setMsg('');
+    setLabErr('');
+    try {
+      await medicoreService.recordLabResult(activeItem.orderId, {
+        labOrderItemId: activeItem.itemId,
+        value: val,
+        numericValue: numVal ? Number(numVal) : undefined,
+      });
+      setActiveItem(null);
+      setVal('');
+      setNumVal('');
+      setMsg('Result entered cleanly');
+      qc.invalidateQueries({ queryKey: ['lab-orders'] });
+      qc.invalidateQueries({ queryKey: ['lab-results'] });
+    } catch (err: any) {
+      setLabErr(getApiErrorMessage(err, 'Failed to record lab result'));
+    }
   };
 
   const handleValidate = async (resultId: string) => {
-    await medicoreService.validateLabResult(resultId);
-    setMsg('Result validated');
-    qc.invalidateQueries({ queryKey: ['lab-orders'] });
-    qc.invalidateQueries({ queryKey: ['lab-results'] });
+    setMsg('');
+    setLabErr('');
+    try {
+      await medicoreService.validateLabResult(resultId);
+      setMsg('Result validated');
+      qc.invalidateQueries({ queryKey: ['lab-orders'] });
+      qc.invalidateQueries({ queryKey: ['lab-results'] });
+    } catch (err: any) {
+      setLabErr(getApiErrorMessage(err, 'Failed to validate result'));
+    }
   };
 
   const titles = {
@@ -270,6 +312,7 @@ export function LaboratorySubView({ mode }: { mode: 'orders' | 'specimens' | 're
       <h1 className="text-2xl font-bold text-gray-900">{titles[mode]}</h1>
 
       {msg && <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-3 text-sm text-emerald-800">{msg}</div>}
+      {labErr && <ErrorState message={labErr} />}
 
       {mode === 'specimens' && (
         <Card>
@@ -416,43 +459,76 @@ export function BillingSubView({ mode }: { mode: 'invoices' | 'payments' | 'repo
   const qc = useQueryClient();
   const { data: invRes, isLoading, error, refetch } = useInvoices({ limit: 50 });
   const { data: patientsRes } = usePatients({ limit: 50 });
+  const { data: paymentsRes } = usePayments({ limit: 30 }, mode === 'payments');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [patientId, setPatientId] = useState('');
   const [desc, setDesc] = useState('Outpatient Consultation');
   const [amount, setAmount] = useState('150');
   const [payMethod, setPayMethod] = useState('CARD');
   const [msg, setMsg] = useState('');
+  const [errMsg, setErrMsg] = useState('');
 
   const invoices = invRes?.data || [];
   const patients = patientsRes?.data || [];
+  const payments = paymentsRes?.data || [];
 
-  const totalBilled = invoices.reduce((s: number, i: any) => s + Number(i.totalAmount || 0), 0);
-  const totalCollected = invoices.reduce((s: number, i: any) => s + Number(i.paidAmount || 0), 0);
-  const outstanding = Math.max(0, totalBilled - totalCollected);
+  const nonCancelled = invoices.filter((i: any) => i.status !== 'CANCELLED');
+  const totalBilled = nonCancelled.reduce((s: number, i: any) => s + Number(i.totalAmount || 0), 0);
+  const totalCollected = nonCancelled.reduce((s: number, i: any) => s + Number(i.paidAmount || 0), 0);
+  const outstanding = roundCurrency(Math.max(0, totalBilled - totalCollected));
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    await medicoreService.createInvoice({
-      patientId,
-      items: [{ description: desc, category: 'CONSULTATION', quantity: 1, unitPrice: Number(amount) }],
-      taxRate: 0,
-      discountAmount: 0,
-    });
-    setMsg('Draft invoice created');
-    qc.invalidateQueries({ queryKey: ['invoices'] });
+    setMsg('');
+    setErrMsg('');
+    if (!patientId) {
+      setErrMsg('Please select a patient');
+      return;
+    }
+    try {
+      await medicoreService.createInvoice({
+        patientId,
+        items: [{ description: desc, category: 'CONSULTATION', quantity: 1, unitPrice: Number(amount) }],
+        taxRate: 0,
+        discountAmount: 0,
+      });
+      setMsg('Draft invoice created');
+      qc.invalidateQueries({ queryKey: ['invoices'] });
+    } catch (err: any) {
+      setErrMsg(getApiErrorMessage(err, 'Failed to create invoice'));
+    }
+  };
+
+  const handleIssue = async (id: string) => {
+    setMsg('');
+    setErrMsg('');
+    try {
+      await medicoreService.issueInvoice(id);
+      setMsg('Invoice issued');
+      qc.invalidateQueries({ queryKey: ['invoices'] });
+    } catch (err: any) {
+      setErrMsg(getApiErrorMessage(err, 'Failed to issue invoice'));
+    }
   };
 
   const handlePay = async (inv: any) => {
-    const remaining = Math.max(0, Number(inv.totalAmount) - Number(inv.paidAmount));
+    setMsg('');
+    setErrMsg('');
+    const remaining = roundCurrency(Math.max(0, Number(inv.totalAmount) - Number(inv.paidAmount)));
     if (remaining <= 0) return;
-    await medicoreService.recordPayment({
-      invoiceId: inv.id,
-      amount: remaining,
-      method: payMethod,
-      reference: `SANDBOX-${Date.now()}`,
-    });
-    setMsg(`Sandbox payment settled for ${inv.invoiceNumber}`);
-    qc.invalidateQueries({ queryKey: ['invoices'] });
+    try {
+      await medicoreService.recordPayment({
+        invoiceId: inv.id,
+        amount: remaining,
+        method: payMethod,
+        reference: `SANDBOX-${Date.now()}`,
+      });
+      setMsg(`Sandbox payment settled for ${inv.invoiceNumber}`);
+      qc.invalidateQueries({ queryKey: ['invoices'] });
+      qc.invalidateQueries({ queryKey: ['payments'] });
+    } catch (err: any) {
+      setErrMsg(getApiErrorMessage(err, 'Payment recording failed'));
+    }
   };
 
   const crumbs = { invoices: 'Invoices', payments: 'Payments', reports: 'Financial Reports' };
@@ -463,6 +539,7 @@ export function BillingSubView({ mode }: { mode: 'invoices' | 'payments' | 'repo
       <h1 className="text-2xl font-bold text-gray-900">{crumbs[mode]}</h1>
 
       {msg && <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-3 text-sm text-emerald-800">{msg}</div>}
+      {errMsg && <ErrorState message={errMsg} />}
 
       {mode === 'invoices' && (
         <div className="grid gap-6 lg:grid-cols-3">
@@ -475,7 +552,7 @@ export function BillingSubView({ mode }: { mode: 'invoices' | 'payments' | 'repo
                   {patients.map((p: any) => <option key={p.id} value={p.id}>{p.user?.firstName} {p.user?.lastName} ({p.registrationNumber})</option>)}
                 </select>
                 <input value={desc} onChange={(e) => setDesc(e.target.value)} required className="w-full rounded-lg border px-3 py-2 text-sm" placeholder="Line item description" />
-                <input type="number" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} required className="w-full rounded-lg border px-3 py-2 text-sm" />
+                <input type="number" min="0.01" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} required className="w-full rounded-lg border px-3 py-2 text-sm" />
                 <Button type="submit" className="w-full">Create Draft</Button>
               </form>
             </CardContent>
@@ -485,7 +562,7 @@ export function BillingSubView({ mode }: { mode: 'invoices' | 'payments' | 'repo
             <CardHeader>
               <CardTitle>Invoice Ledger</CardTitle>
               <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="rounded-lg border px-3 py-1.5 text-sm">
-                {['ALL', 'DRAFT', 'ISSUED', 'PARTIALLY_PAID', 'PAID'].map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
+                {['ALL', 'DRAFT', 'ISSUED', 'PARTIALLY_PAID', 'PAID', 'CANCELLED'].map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
               </select>
             </CardHeader>
             <CardContent>
@@ -500,7 +577,7 @@ export function BillingSubView({ mode }: { mode: 'invoices' | 'payments' | 'repo
                       <div className="flex items-center gap-2">
                         <StatusBadge status={inv.status} />
                         {inv.status === 'DRAFT' && (
-                          <Button size="sm" onClick={() => medicoreService.issueInvoice(inv.id).then(() => qc.invalidateQueries({ queryKey: ['invoices'] }))}>Issue</Button>
+                          <Button size="sm" onClick={() => handleIssue(inv.id)}>Issue</Button>
                         )}
                       </div>
                     </div>
@@ -513,34 +590,58 @@ export function BillingSubView({ mode }: { mode: 'invoices' | 'payments' | 'repo
       )}
 
       {mode === 'payments' && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Payable Invoices (Sandbox Settlement)</CardTitle>
-            <select value={payMethod} onChange={(e) => setPayMethod(e.target.value)} className="rounded-lg border px-3 py-1.5 text-sm">
-              <option value="CARD">CARD</option>
-              <option value="CASH">CASH</option>
-              <option value="INSURANCE">INSURANCE</option>
-              <option value="BANK_TRANSFER">BANK_TRANSFER</option>
-            </select>
-          </CardHeader>
-          <CardContent>
-            {isLoading ? <LoadingSkeleton /> : invoices.filter((i: any) => ['ISSUED', 'PARTIALLY_PAID'].includes(i.status)).length === 0 ? (
-              <EmptyState title="No outstanding issued invoices" />
-            ) : (
-              <div className="divide-y text-sm">
-                {invoices.filter((i: any) => ['ISSUED', 'PARTIALLY_PAID'].includes(i.status)).map((inv: any) => (
-                  <div key={inv.id} className="py-3 flex items-center justify-between">
-                    <div>
-                      <p className="font-mono font-medium">{inv.invoiceNumber} — {inv.patient?.user?.firstName} {inv.patient?.user?.lastName}</p>
-                      <p className="text-xs text-gray-500">Balance Due: ${(Number(inv.totalAmount) - Number(inv.paidAmount)).toFixed(2)}</p>
+        <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Payable Invoices (Sandbox Settlement)</CardTitle>
+              <select value={payMethod} onChange={(e) => setPayMethod(e.target.value)} className="rounded-lg border px-3 py-1.5 text-sm">
+                <option value="CARD">CARD</option>
+                <option value="CASH">CASH</option>
+                <option value="INSURANCE">INSURANCE</option>
+                <option value="BANK_TRANSFER">BANK_TRANSFER</option>
+              </select>
+            </CardHeader>
+            <CardContent>
+              {isLoading ? <LoadingSkeleton /> : error ? <ErrorState onRetry={() => refetch()} /> : invoices.filter((i: any) => ['ISSUED', 'PARTIALLY_PAID'].includes(i.status)).length === 0 ? (
+                <EmptyState title="No outstanding issued invoices" />
+              ) : (
+                <div className="divide-y text-sm">
+                  {invoices.filter((i: any) => ['ISSUED', 'PARTIALLY_PAID'].includes(i.status)).map((inv: any) => (
+                    <div key={inv.id} className="py-3 flex items-center justify-between">
+                      <div>
+                        <p className="font-mono font-medium">{inv.invoiceNumber} — {inv.patient?.user?.firstName} {inv.patient?.user?.lastName}</p>
+                        <p className="text-xs text-gray-500">Balance Due: ${roundCurrency(Math.max(0, Number(inv.totalAmount) - Number(inv.paidAmount))).toFixed(2)}</p>
+                      </div>
+                      <Button size="sm" variant="secondary" onClick={() => handlePay(inv)}>Settle via {payMethod}</Button>
                     </div>
-                    <Button size="sm" variant="secondary" onClick={() => handlePay(inv)}>Settle via {payMethod}</Button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader><CardTitle>Recent Payments Ledger</CardTitle></CardHeader>
+            <CardContent>
+              {payments.length === 0 ? <EmptyState title="No recorded payments yet" /> : (
+                <div className="divide-y text-sm">
+                  {payments.map((p: any) => (
+                    <div key={p.id} className="py-2.5 flex items-center justify-between">
+                      <div>
+                        <p className="font-mono font-medium">{p.invoice?.invoiceNumber || p.invoiceId} • {p.method}</p>
+                        <p className="text-xs text-gray-500">{p.reference || p.id}</p>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className="font-semibold text-emerald-700">${Number(p.amount).toFixed(2)}</span>
+                        <StatusBadge status={p.status || 'COMPLETED'} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
       )}
 
       {mode === 'reports' && (

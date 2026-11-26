@@ -27,6 +27,7 @@ import {
   useUsers,
 } from '@/hooks/useMedicore';
 import { medicoreService } from '@/services/medicore';
+import { getApiErrorMessage, roundCurrency } from '@/lib/api';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Button,
@@ -45,9 +46,19 @@ export function ReceptionistDashboardView() {
   const { data: apptsRes, isLoading, error, refetch } = useAppointments({ limit: 30 });
   const { data: patientsRes } = usePatients({ limit: 30 });
   const actionMutation = useAppointmentAction();
+  const [errMsg, setErrMsg] = useState('');
 
   const appointments = apptsRes?.data || [];
   const patients = patientsRes?.data || [];
+
+  const handleTransition = async (id: string, action: string) => {
+    setErrMsg('');
+    try {
+      await actionMutation.mutateAsync({ id, action });
+    } catch (err: any) {
+      setErrMsg(getApiErrorMessage(err, 'Appointment update failed'));
+    }
+  };
 
   return (
     <div className="space-y-8">
@@ -55,6 +66,7 @@ export function ReceptionistDashboardView() {
         <h1 className="text-2xl font-bold text-gray-900">Reception Dashboard</h1>
         <p className="text-sm text-gray-500">Patient registration, appointment confirmation, and check-in</p>
       </div>
+      {errMsg && <ErrorState message={errMsg} />}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard icon={Calendar} label="Total Appointments" value={apptsRes?.meta?.total ?? appointments.length} color="bg-sky-500" />
         <StatCard icon={UserCheck} label="Checked In" value={appointments.filter((a: any) => a.status === 'CHECKED_IN').length} color="bg-emerald-500" />
@@ -78,12 +90,12 @@ export function ReceptionistDashboardView() {
                   <div className="flex items-center gap-2">
                     <StatusBadge status={a.status} />
                     {a.status === 'REQUESTED' && (
-                      <Button size="sm" onClick={() => actionMutation.mutate({ id: a.id, action: 'confirm' })}>Confirm</Button>
+                      <Button size="sm" onClick={() => handleTransition(a.id, 'confirm')}>Confirm</Button>
                     )}
                     {a.status === 'CONFIRMED' && (
                       <>
-                        <Button size="sm" variant="secondary" onClick={() => actionMutation.mutate({ id: a.id, action: 'check-in' })}>Check In</Button>
-                        <Button size="sm" variant="outline" onClick={() => actionMutation.mutate({ id: a.id, action: 'no-show' })}>No Show</Button>
+                        <Button size="sm" variant="secondary" onClick={() => handleTransition(a.id, 'check-in')}>Check In</Button>
+                        <Button size="sm" variant="outline" onClick={() => handleTransition(a.id, 'no-show')}>No Show</Button>
                       </>
                     )}
                   </div>
@@ -103,31 +115,49 @@ export function LaboratoryDashboardView() {
   const [activeItem, setActiveItem] = useState<{ orderId: string; itemId: string; testName: string } | null>(null);
   const [val, setVal] = useState('');
   const [numVal, setNumVal] = useState('');
+  const [labErr, setLabErr] = useState('');
 
   const orders = ordersRes?.data || [];
 
   const handleCollect = async (orderId: string) => {
-    await medicoreService.collectSpecimens(orderId);
-    qc.invalidateQueries({ queryKey: ['lab-orders'] });
+    setLabErr('');
+    try {
+      await medicoreService.collectSpecimens(orderId);
+      qc.invalidateQueries({ queryKey: ['lab-orders'] });
+    } catch (err: any) {
+      setLabErr(getApiErrorMessage(err, 'Failed to collect specimen'));
+    }
   };
 
   const handleRecordResult = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!activeItem) return;
-    await medicoreService.recordLabResult(activeItem.orderId, {
-      labOrderItemId: activeItem.itemId,
-      value: val,
-      numericValue: numVal ? Number(numVal) : undefined,
-    });
-    setActiveItem(null);
-    setVal('');
-    setNumVal('');
-    qc.invalidateQueries({ queryKey: ['lab-orders'] });
+    setLabErr('');
+    try {
+      await medicoreService.recordLabResult(activeItem.orderId, {
+        labOrderItemId: activeItem.itemId,
+        value: val,
+        numericValue: numVal ? Number(numVal) : undefined,
+      });
+      setActiveItem(null);
+      setVal('');
+      setNumVal('');
+      qc.invalidateQueries({ queryKey: ['lab-orders'] });
+      qc.invalidateQueries({ queryKey: ['lab-results'] });
+    } catch (err: any) {
+      setLabErr(getApiErrorMessage(err, 'Failed to record lab result'));
+    }
   };
 
   const handleValidate = async (resultId: string) => {
-    await medicoreService.validateLabResult(resultId);
-    qc.invalidateQueries({ queryKey: ['lab-orders'] });
+    setLabErr('');
+    try {
+      await medicoreService.validateLabResult(resultId);
+      qc.invalidateQueries({ queryKey: ['lab-orders'] });
+      qc.invalidateQueries({ queryKey: ['lab-results'] });
+    } catch (err: any) {
+      setLabErr(getApiErrorMessage(err, 'Failed to validate result'));
+    }
   };
 
   return (
@@ -136,6 +166,7 @@ export function LaboratoryDashboardView() {
         <h1 className="text-2xl font-bold text-gray-900">Laboratory Dashboard</h1>
         <p className="text-sm text-gray-500">Order queue, specimen collection, result entry, and validation</p>
       </div>
+      {labErr && <ErrorState message={labErr} />}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard icon={FlaskConical} label="Total Orders" value={ordersRes?.meta?.total ?? orders.length} color="bg-sky-500" />
         <StatCard icon={TestTube} label="Pending Collection" value={orders.filter((o: any) => o.status === 'ORDERED').length} color="bg-amber-500" />
@@ -220,36 +251,63 @@ export function BillingDashboardView() {
   const [patientId, setPatientId] = useState('');
   const [desc, setDesc] = useState('Outpatient Consultation');
   const [amount, setAmount] = useState('150');
+  const [billErr, setBillErr] = useState('');
 
   const invoices = invRes?.data || [];
   const patients = patientsRes?.data || [];
 
-  const totalBilled = invoices.reduce((s: number, i: any) => s + (i.totalAmount || 0), 0);
-  const totalCollected = invoices.reduce((s: number, i: any) => s + (i.paidAmount || 0), 0);
+  const nonCancelled = invoices.filter((i: any) => i.status !== 'CANCELLED');
+  const totalBilled = nonCancelled.reduce((s: number, i: any) => s + Number(i.totalAmount || 0), 0);
+  const totalCollected = nonCancelled.reduce((s: number, i: any) => s + Number(i.paidAmount || 0), 0);
+  const outstanding = roundCurrency(Math.max(0, totalBilled - totalCollected));
 
   const chartData = [
     { name: 'Billed', amount: totalBilled },
     { name: 'Collected', amount: totalCollected },
-    { name: 'Outstanding', amount: Math.max(0, totalBilled - totalCollected) },
+    { name: 'Outstanding', amount: outstanding },
   ];
 
   const handleCreateInvoice = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!patientId) return;
-    await medicoreService.createInvoice({
-      patientId,
-      items: [{ description: desc, category: 'CONSULTATION', quantity: 1, unitPrice: Number(amount) }],
-      taxRate: 0,
-      discountAmount: 0,
-    });
-    qc.invalidateQueries({ queryKey: ['invoices'] });
+    setBillErr('');
+    if (!patientId) {
+      setBillErr('Please select a patient');
+      return;
+    }
+    try {
+      await medicoreService.createInvoice({
+        patientId,
+        items: [{ description: desc, category: 'CONSULTATION', quantity: 1, unitPrice: Number(amount) }],
+        taxRate: 0,
+        discountAmount: 0,
+      });
+      qc.invalidateQueries({ queryKey: ['invoices'] });
+    } catch (err: any) {
+      setBillErr(getApiErrorMessage(err, 'Failed to create invoice'));
+    }
+  };
+
+  const handleIssueInvoice = async (id: string) => {
+    setBillErr('');
+    try {
+      await medicoreService.issueInvoice(id);
+      qc.invalidateQueries({ queryKey: ['invoices'] });
+    } catch (err: any) {
+      setBillErr(getApiErrorMessage(err, 'Failed to issue invoice'));
+    }
   };
 
   const handlePayFull = async (inv: any) => {
-    const remaining = Math.max(0, inv.totalAmount - inv.paidAmount);
+    setBillErr('');
+    const remaining = roundCurrency(Math.max(0, Number(inv.totalAmount) - Number(inv.paidAmount)));
     if (remaining <= 0) return;
-    await medicoreService.recordPayment({ invoiceId: inv.id, amount: remaining, method: 'CARD', reference: `SANDBOX-${Date.now()}` });
-    qc.invalidateQueries({ queryKey: ['invoices'] });
+    try {
+      await medicoreService.recordPayment({ invoiceId: inv.id, amount: remaining, method: 'CARD', reference: `SANDBOX-${Date.now()}` });
+      qc.invalidateQueries({ queryKey: ['invoices'] });
+      qc.invalidateQueries({ queryKey: ['payments'] });
+    } catch (err: any) {
+      setBillErr(getApiErrorMessage(err, 'Failed to record payment'));
+    }
   };
 
   return (
@@ -258,11 +316,12 @@ export function BillingDashboardView() {
         <h1 className="text-2xl font-bold text-gray-900">Billing Dashboard (Sandbox Mode)</h1>
         <p className="text-sm text-gray-500">Invoice generation, issuance, and sandbox payment tracking</p>
       </div>
+      {billErr && <ErrorState message={billErr} />}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard icon={Receipt} label="Total Invoices" value={invRes?.meta?.total ?? invoices.length} color="bg-sky-500" />
         <StatCard icon={TrendingUp} label="Total Billed" value={`$${totalBilled.toFixed(2)}`} color="bg-indigo-500" />
         <StatCard icon={CreditCard} label="Collected" value={`$${totalCollected.toFixed(2)}`} color="bg-emerald-500" />
-        <StatCard icon={Clock} label="Outstanding" value={`$${Math.max(0, totalBilled - totalCollected).toFixed(2)}`} color="bg-rose-500" />
+        <StatCard icon={Clock} label="Outstanding" value={`$${outstanding.toFixed(2)}`} color="bg-rose-500" />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
@@ -275,7 +334,7 @@ export function BillingDashboardView() {
                 {patients.map((p: any) => <option key={p.id} value={p.id}>{p.user?.firstName} {p.user?.lastName} ({p.registrationNumber})</option>)}
               </select>
               <input value={desc} onChange={(e) => setDesc(e.target.value)} required className="w-full rounded-lg border px-3 py-2 text-sm" placeholder="Service description" />
-              <input type="number" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} required className="w-full rounded-lg border px-3 py-2 text-sm" placeholder="Amount ($)" />
+              <input type="number" min="0.01" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} required className="w-full rounded-lg border px-3 py-2 text-sm" placeholder="Amount ($)" />
               <Button type="submit">Create Draft Invoice</Button>
             </form>
           </CardContent>
@@ -314,7 +373,7 @@ export function BillingDashboardView() {
                       <td className="py-3"><StatusBadge status={inv.status} /></td>
                       <td className="py-3 text-right space-x-2">
                         {inv.status === 'DRAFT' && (
-                          <Button size="sm" onClick={() => medicoreService.issueInvoice(inv.id).then(() => qc.invalidateQueries({ queryKey: ['invoices'] }))}>Issue</Button>
+                          <Button size="sm" onClick={() => handleIssueInvoice(inv.id)}>Issue</Button>
                         )}
                         {(inv.status === 'ISSUED' || inv.status === 'PARTIALLY_PAID') && (
                           <Button size="sm" variant="secondary" onClick={() => handlePayFull(inv)}>Record Payment</Button>

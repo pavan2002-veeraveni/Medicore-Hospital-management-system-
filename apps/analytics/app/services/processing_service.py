@@ -3,15 +3,16 @@
 # =============================================================================
 
 from datetime import datetime
-from typing import Optional, List
+
 import structlog
+
 from app.schemas.processing import (
-    LabDataInput,
     AppointmentDataInput,
     DataProcessingResponse,
     DataQualityReport,
-    ValidationIssue,
+    LabDataInput,
     QualityDimension,
+    ValidationIssue,
 )
 
 logger = structlog.get_logger()
@@ -44,7 +45,7 @@ class ProcessingService:
 
     async def process_lab_data(self, data: LabDataInput) -> DataProcessingResponse:
         """Validate and process laboratory test data."""
-        issues: List[ValidationIssue] = []
+        issues: list[ValidationIssue] = []
         valid_count = 0
 
         for idx, record in enumerate(data.records):
@@ -59,26 +60,28 @@ class ProcessingService:
                 record_valid = False
 
             # Validate units
-            if data.validate_units and record.unit:
-                if record.unit not in VALID_UNITS:
-                    issues.append(ValidationIssue(
-                        record_index=idx, field="unit",
-                        issue_type="INVALID",
-                        message=f"Unknown unit '{record.unit}'. Valid units: {', '.join(sorted(VALID_UNITS)[:10])}...",
-                        severity="WARNING",
-                    ))
+            if data.validate_units and record.unit and record.unit not in VALID_UNITS:
+                issues.append(ValidationIssue(
+                    record_index=idx, field="unit",
+                    issue_type="INVALID",
+                    message=f"Unknown unit '{record.unit}'. Valid units: {', '.join(sorted(VALID_UNITS)[:10])}...",
+                    severity="WARNING",
+                ))
 
             # Validate reference ranges
             if data.validate_references:
-                if record.reference_min is not None and record.reference_max is not None:
-                    if record.reference_min >= record.reference_max:
-                        issues.append(ValidationIssue(
-                            record_index=idx, field="reference_range",
-                            issue_type="INVALID",
-                            message=f"Reference min ({record.reference_min}) >= max ({record.reference_max})",
-                            severity="ERROR",
-                        ))
-                        record_valid = False
+                if (
+                    record.reference_min is not None
+                    and record.reference_max is not None
+                    and record.reference_min >= record.reference_max
+                ):
+                    issues.append(ValidationIssue(
+                        record_index=idx, field="reference_range",
+                        issue_type="INVALID",
+                        message=f"Reference min ({record.reference_min}) >= max ({record.reference_max})",
+                        severity="ERROR",
+                    ))
+                    record_valid = False
 
                 # Check if numeric value is within range
                 if record.numeric_value is not None:
@@ -114,15 +117,14 @@ class ProcessingService:
                     ))
 
             # Check temporal consistency
-            if record.collected_at and record.resulted_at:
-                if record.resulted_at < record.collected_at:
-                    issues.append(ValidationIssue(
-                        record_index=idx, field="resulted_at",
-                        issue_type="INVALID",
-                        message="Result time is before collection time",
-                        severity="ERROR",
-                    ))
-                    record_valid = False
+            if record.collected_at and record.resulted_at and record.resulted_at < record.collected_at:
+                issues.append(ValidationIssue(
+                    record_index=idx, field="resulted_at",
+                    issue_type="INVALID",
+                    message="Result time is before collection time",
+                    severity="ERROR",
+                ))
+                record_valid = False
 
             if record_valid:
                 valid_count += 1
@@ -136,13 +138,13 @@ class ProcessingService:
             summary={
                 "error_issues": len([i for i in issues if i.severity == "ERROR"]),
                 "warning_issues": len([i for i in issues if i.severity == "WARNING"]),
-                "unique_test_codes": len(set(r.test_code for r in data.records if r.test_code)),
+                "unique_test_codes": len({r.test_code for r in data.records if r.test_code}),
             },
         )
 
     async def process_appointment_data(self, data: AppointmentDataInput) -> DataProcessingResponse:
         """Validate and process appointment data."""
-        issues: List[ValidationIssue] = []
+        issues: list[ValidationIssue] = []
         valid_count = 0
 
         for idx, record in enumerate(data.records):
@@ -180,17 +182,16 @@ class ProcessingService:
                 record_valid = False
 
             # Validate check-in consistency
-            if record.checked_in_at and record.scheduled_start:
-                if record.checked_in_at < record.scheduled_start:
-                    # Early check-in is fine but flag very early ones
-                    diff_hours = (record.scheduled_start - record.checked_in_at).total_seconds() / 3600
-                    if diff_hours > 2:
-                        issues.append(ValidationIssue(
-                            record_index=idx, field="checked_in_at",
-                            issue_type="INVALID",
-                            message=f"Check-in is {diff_hours:.1f} hours before appointment",
-                            severity="WARNING",
-                        ))
+            if record.checked_in_at and record.scheduled_start and record.checked_in_at < record.scheduled_start:
+                # Early check-in is fine but flag very early ones
+                diff_hours = (record.scheduled_start - record.checked_in_at).total_seconds() / 3600
+                if diff_hours > 2:
+                    issues.append(ValidationIssue(
+                        record_index=idx, field="checked_in_at",
+                        issue_type="INVALID",
+                        message=f"Check-in is {diff_hours:.1f} hours before appointment",
+                        severity="WARNING",
+                    ))
 
             # Missing required fields
             if not record.patient_id:
@@ -241,8 +242,8 @@ class ProcessingService:
             summary={
                 "error_issues": len([i for i in issues if i.severity == "ERROR"]),
                 "warning_issues": len([i for i in issues if i.severity == "WARNING"]),
-                "unique_patients": len(set(r.patient_id for r in data.records if r.patient_id)),
-                "unique_doctors": len(set(r.doctor_id for r in data.records if r.doctor_id)),
+                "unique_patients": len({r.patient_id for r in data.records if r.patient_id}),
+                "unique_doctors": len({r.doctor_id for r in data.records if r.doctor_id}),
             },
         )
 

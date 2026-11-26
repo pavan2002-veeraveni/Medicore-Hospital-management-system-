@@ -120,6 +120,10 @@ const ENCOUNTER_SUMMARY_INCLUDE = {
       type: true,
     },
   },
+  vitalSigns: {
+    orderBy: { recordedAt: 'desc' as const },
+    take: 5,
+  },
 };
 
 const VALID_TRANSITIONS: Record<string, string[]> = {

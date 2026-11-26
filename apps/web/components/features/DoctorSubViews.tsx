@@ -14,6 +14,7 @@ import {
   usePrescriptions,
 } from '@/hooks/useMedicore';
 import { medicoreService } from '@/services/medicore';
+import { getApiErrorMessage } from '@/lib/api';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   Breadcrumbs,
@@ -47,7 +48,7 @@ export function DoctorAppointmentsView() {
     try {
       await actionMutation.mutateAsync({ id, action, body });
     } catch (err: any) {
-      setErrMsg(err?.response?.data?.message || 'Action failed');
+      setErrMsg(getApiErrorMessage(err, 'Action failed'));
     }
   };
 
@@ -153,13 +154,20 @@ export function DoctorPrescriptionsView() {
       setNotes('');
       qc.invalidateQueries({ queryKey: ['prescriptions'] });
     } catch (err: any) {
-      setErrMsg(err?.response?.data?.message || 'Failed to create prescription');
+      setErrMsg(getApiErrorMessage(err, 'Failed to create prescription'));
     }
   };
 
   const handleStatus = async (id: string, status: string) => {
-    await medicoreService.updatePrescriptionStatus(id, status);
-    qc.invalidateQueries({ queryKey: ['prescriptions'] });
+    setMsg('');
+    setErrMsg('');
+    try {
+      await medicoreService.updatePrescriptionStatus(id, status);
+      setMsg(`Prescription marked ${status.toLowerCase()}`);
+      qc.invalidateQueries({ queryKey: ['prescriptions'] });
+    } catch (err: any) {
+      setErrMsg(getApiErrorMessage(err, 'Failed to update prescription status'));
+    }
   };
 
   return (
@@ -493,27 +501,37 @@ export function NurseVitalsView() {
   const [height, setHeight] = useState('172');
   const [notes, setNotes] = useState('');
   const [msg, setMsg] = useState('');
+  const [errMsg, setErrMsg] = useState('');
 
   const encounters = encRes?.data || [];
   const inProgress = encounters.filter((e: any) => e.status === 'IN_PROGRESS');
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedEncId) return;
-    const res = await medicoreService.recordVitals(selectedEncId, {
-      temperature: Number(temp),
-      bpSystolic: Number(sys),
-      bpDiastolic: Number(dia),
-      heartRate: Number(hr),
-      respiratoryRate: Number(rr),
-      oxygenSaturation: Number(spo2),
-      weight: Number(weight),
-      height: Number(height),
-      notes: notes || undefined,
-    });
-    setMsg(`Vital signs saved cleanly (BMI: ${res.bmi ?? 'N/A'})`);
-    setNotes('');
-    refetch();
+    setMsg('');
+    setErrMsg('');
+    if (!selectedEncId) {
+      setErrMsg('Please select an in-progress encounter');
+      return;
+    }
+    try {
+      const payload: Record<string, any> = {};
+      if (temp.trim()) payload.temperature = Number(temp);
+      if (sys.trim()) payload.bpSystolic = Number(sys);
+      if (dia.trim()) payload.bpDiastolic = Number(dia);
+      if (hr.trim()) payload.heartRate = Number(hr);
+      if (rr.trim()) payload.respiratoryRate = Number(rr);
+      if (spo2.trim()) payload.oxygenSaturation = Number(spo2);
+      if (weight.trim()) payload.weight = Number(weight);
+      if (height.trim()) payload.height = Number(height);
+      if (notes.trim()) payload.notes = notes.trim();
+      const res = await medicoreService.recordVitals(selectedEncId, payload);
+      setMsg(`Vital signs saved cleanly (BMI: ${res.bmi ?? 'N/A'})`);
+      setNotes('');
+      refetch();
+    } catch (err: any) {
+      setErrMsg(getApiErrorMessage(err, 'Failed to save vital signs'));
+    }
   };
 
   return (
@@ -525,6 +543,7 @@ export function NurseVitalsView() {
       </div>
 
       {msg && <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-3 text-sm text-emerald-800">{msg}</div>}
+      {errMsg && <ErrorState message={errMsg} />}
 
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>
