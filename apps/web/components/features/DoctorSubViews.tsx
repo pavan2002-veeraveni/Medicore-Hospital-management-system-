@@ -462,15 +462,13 @@ export function DoctorScheduleView() {
               <EmptyState title="No slots generated for selected date" />
             ) : (
               <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-                {slotsData.map((slot: any, idx: number) => (
+                {slotsData.map((slot: any) => (
                   <div
-                    key={idx}
-                    className={`rounded-lg border px-2 py-2 text-center text-xs ${
-                      slot.available ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-gray-200 bg-gray-100 text-gray-400 line-through'
-                    }`}
+                    key={slot.startTime}
+                    className="rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-800 px-2 py-2 text-center text-xs"
                   >
                     <Clock className="inline h-3 w-3 mr-1" />
-                    {new Date(slot.start).toISOString().slice(11, 16)} UTC
+                    {new Date(slot.startTime).toISOString().slice(11, 16)} UTC
                   </div>
                 ))}
               </div>

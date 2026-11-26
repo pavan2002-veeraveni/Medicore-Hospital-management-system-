@@ -43,3 +43,39 @@ api.interceptors.response.use(
 );
 
 export default api;
+
+/**
+ * Build an idempotency key within the API's 100-char limit, scoped per patient,
+ * doctor, UTC slot start time, and submission attempt (or explicit attemptId).
+ */
+export function buildAppointmentIdempotencyKey(
+  patientId: string,
+  doctorId: string,
+  scheduledStart: string,
+  attemptId?: string
+): string {
+  const nonce =
+    attemptId ||
+    (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID().slice(0, 12)
+      : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`);
+  return `book-${patientId.slice(0, 8)}-${doctorId.slice(0, 8)}-${scheduledStart.slice(0, 16)}-${nonce}`.slice(
+    0,
+    100
+  );
+}
+
+/**
+ * Extract a user-facing message from an Axios API error response, appending any
+ * backend Zod validation detail messages when present.
+ */
+export function getApiErrorMessage(err: any, fallback = 'Request failed'): string {
+  const details = Array.isArray(err?.response?.data?.error?.details)
+    ? err.response.data.error.details
+        .map((d: { message?: string }) => d?.message)
+        .filter(Boolean)
+        .join(', ')
+    : '';
+  const baseMsg = err?.response?.data?.message || fallback;
+  return details ? `${baseMsg}: ${details}` : baseMsg;
+}

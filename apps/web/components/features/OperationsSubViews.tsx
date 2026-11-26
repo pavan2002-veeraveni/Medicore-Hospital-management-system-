@@ -14,6 +14,7 @@ import {
   usePatients,
 } from '@/hooks/useMedicore';
 import { medicoreService } from '@/services/medicore';
+import { buildAppointmentIdempotencyKey, getApiErrorMessage } from '@/lib/api';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   Breadcrumbs,
@@ -62,12 +63,20 @@ export function ReceptionistAppointmentsView() {
     }
     const slot = JSON.parse(selectedSlot);
     try {
-      await bookMutation.mutateAsync({ patientId, doctorId, scheduledStart: slot.start, scheduledEnd: slot.end, type, reason });
+      await bookMutation.mutateAsync({
+        patientId,
+        doctorId,
+        scheduledStart: slot.startTime,
+        scheduledEnd: slot.endTime,
+        type,
+        reason: reason.trim() || undefined,
+        idempotencyKey: buildAppointmentIdempotencyKey(patientId, doctorId, slot.startTime),
+      });
       setFeedback('Appointment booked cleanly');
       setSelectedSlot('');
       setReason('');
     } catch (err: any) {
-      setErrMsg(err?.response?.data?.message || 'Booking failed');
+      setErrMsg(getApiErrorMessage(err, 'Booking failed'));
     }
   };
 
@@ -95,14 +104,15 @@ export function ReceptionistAppointmentsView() {
               <input type="date" value={date} onChange={(e) => { setDate(e.target.value); setSelectedSlot(''); }} required className="w-full rounded-lg border px-3 py-2 text-sm" />
               <select value={selectedSlot} onChange={(e) => setSelectedSlot(e.target.value)} required className="w-full rounded-lg border px-3 py-2 text-sm">
                 <option value="">Select open time slot...</option>
-                {(slots || []).filter((s: any) => s.available).map((s: any, idx: number) => (
-                  <option key={idx} value={JSON.stringify(s)}>{new Date(s.start).toISOString().slice(11, 16)} UTC</option>
+                {(slots || []).map((s: any) => (
+                  <option key={s.startTime} value={JSON.stringify(s)}>{new Date(s.startTime).toISOString().slice(11, 16)} UTC</option>
                 ))}
               </select>
               <select value={type} onChange={(e) => setType(e.target.value)} className="w-full rounded-lg border px-3 py-2 text-sm">
                 <option value="CONSULTATION">CONSULTATION</option>
                 <option value="FOLLOW_UP">FOLLOW UP</option>
-                <option value="CHECKUP">CHECKUP</option>
+                <option value="PROCEDURE">PROCEDURE</option>
+                <option value="EMERGENCY">EMERGENCY</option>
               </select>
               <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Visit reason" className="w-full rounded-lg border px-3 py-2 text-sm" />
               <Button type="submit" className="w-full" loading={bookMutation.isPending}>Book Slot</Button>

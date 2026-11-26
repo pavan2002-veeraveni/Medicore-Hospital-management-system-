@@ -1,5 +1,7 @@
 'use client';
 
+import { buildAppointmentIdempotencyKey, getApiErrorMessage } from '@/lib/api';
+
 import React, { useState } from 'react';
 import { Calendar, FileText, FlaskConical, Receipt, ShieldCheck, Plus, XCircle } from 'lucide-react';
 import {
@@ -159,14 +161,14 @@ export function BookAppointmentModal({
         scheduledStart: selectedSlot.startTime,
         scheduledEnd: selectedSlot.endTime,
         type: 'CONSULTATION',
-        reason: reason || 'Scheduled consultation',
-        idempotencyKey: `ui-book-${patientId}-${doctorId}-${selectedSlot.startTime}`,
+        reason: reason.trim() || 'Scheduled consultation',
+        idempotencyKey: buildAppointmentIdempotencyKey(patientId, doctorId, selectedSlot.startTime),
       });
       onClose();
       setSelectedSlot(null);
       setReason('');
     } catch (err: any) {
-      setError(err?.response?.data?.message || 'Booking failed');
+      setError(getApiErrorMessage(err, 'Booking failed'));
     }
   };
 

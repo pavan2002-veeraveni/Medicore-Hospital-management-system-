@@ -8,6 +8,7 @@ import { StatusBadge, EmptyState, ErrorState } from '@/components/ui/primitives'
 import { PatientDashboardView } from '@/components/features/PatientPortalViews';
 import { Calendar, Home } from 'lucide-react';
 import { medicoreService } from '@/services/medicore';
+import { buildAppointmentIdempotencyKey, getApiErrorMessage } from '@/lib/api';
 
 function renderWithQuery(ui: React.ReactElement) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -115,5 +116,30 @@ describe('MediCore Frontend Component & Role Tests', () => {
       expect(screen.getByText(/Dr. John Smith/i)).toBeInTheDocument();
       expect(screen.getByText('$175.00')).toBeInTheDocument();
     });
+  });
+
+  it('builds compact <=100-char idempotency keys and formats API validation details', () => {
+    const patientUuid = 'a1b2c3d4-e5f6-4789-abcd-1234567890ef';
+    const doctorUuid = 'ba155f50-d57b-4c17-ac5f-84d3489ac5d3';
+    const slotStart = '2026-11-27T13:00:00.000Z';
+
+    const key = buildAppointmentIdempotencyKey(patientUuid, doctorUuid, slotStart, 'attempt-01');
+    expect(key).toBe('book-a1b2c3d4-ba155f50-2026-11-27T13:00-attempt-01');
+    expect(key.length).toBeLessThanOrEqual(100);
+    expect(buildAppointmentIdempotencyKey(patientUuid, doctorUuid, slotStart).length).toBeLessThanOrEqual(100);
+
+    const formatted = getApiErrorMessage(
+      {
+        response: {
+          data: {
+            message: 'Request validation failed',
+            error: { details: [{ message: 'Invalid slot' }, { message: 'Reason cannot be empty' }] },
+          },
+        },
+      },
+      'Booking failed'
+    );
+    expect(formatted).toBe('Request validation failed: Invalid slot, Reason cannot be empty');
+    expect(getApiErrorMessage({}, 'Booking failed')).toBe('Booking failed');
   });
 });
