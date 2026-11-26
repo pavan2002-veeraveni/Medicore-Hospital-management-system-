@@ -4,6 +4,7 @@
 
 import pytest
 from httpx import AsyncClient, ASGITransport
+from app.config import settings
 from app.main import app
 from datetime import datetime, timedelta, timezone
 import json
@@ -14,7 +15,7 @@ from pathlib import Path
 @pytest.fixture
 def test_headers():
     """Headers with valid API key for testing."""
-    return {"X-API-Key": "change-this-to-a-secure-api-key"}
+    return {"X-API-Key": settings.API_KEY}
 
 
 @pytest.fixture

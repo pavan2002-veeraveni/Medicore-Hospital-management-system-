@@ -12,6 +12,7 @@ class Settings(BaseSettings):
         env_file=".env",
         env_prefix="ANALYTICS_",
         case_sensitive=True,
+        extra="ignore",
     )
 
     # Server
