@@ -1,0 +1,33 @@
+{
+  "records": [
+    {
+      "test_code": "CBC",
+      "test_name": "Complete Blood Count",
+      "value": "7400",
+      "numeric_value": 7400,
+      "unit": "cells/μL",
+      "reference_min": 4500,
+      "reference_max": 11000,
+      "sample_type": "BLOOD",
+      "collected_at": "2026-11-25T08:00:00Z",
+      "resulted_at": "2026-11-25T10:30:00Z",
+      "patient_id": "synthetic-pat-001"
+    },
+    {
+      "test_code": "GLU-F",
+      "test_name": "Blood Glucose Fasting",
+      "value": "126",
+      "numeric_value": 126,
+      "unit": "mg/dL",
+      "reference_min": 70,
+      "reference_max": 100,
+      "sample_type": "BLOOD",
+      "collected_at": "2026-11-25T08:15:00Z",
+      "resulted_at": "2026-11-25T09:45:00Z",
+      "patient_id": "synthetic-pat-002"
+    }
+  ],
+  "validate_units": true,
+  "validate_references": true,
+  "flag_missing": true
+}

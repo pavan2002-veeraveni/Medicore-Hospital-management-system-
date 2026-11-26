@@ -1,0 +1,27 @@
+{
+  "records": [
+    {
+      "appointment_id": "synthetic-apt-001",
+      "patient_id": "synthetic-pat-001",
+      "doctor_id": "synthetic-doc-001",
+      "scheduled_start": "2026-11-26T09:00:00Z",
+      "scheduled_end": "2026-11-26T09:30:00Z",
+      "status": "COMPLETED",
+      "type": "CONSULTATION",
+      "checked_in_at": "2026-11-26T08:50:00Z",
+      "department": "Cardiology"
+    },
+    {
+      "appointment_id": "synthetic-apt-002",
+      "patient_id": "synthetic-pat-002",
+      "doctor_id": "synthetic-doc-001",
+      "scheduled_start": "2026-11-26T09:30:00Z",
+      "scheduled_end": "2026-11-26T10:00:00Z",
+      "status": "CONFIRMED",
+      "type": "FOLLOW_UP",
+      "department": "Cardiology"
+    }
+  ],
+  "check_conflicts": true,
+  "validate_transitions": true
+}
